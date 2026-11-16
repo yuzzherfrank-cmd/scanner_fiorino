@@ -1,9 +1,29 @@
 {
   "name": "Escáner Pro - Carga Fiorino",
-  "short_name": "Escáner Pro",
+  "short_name": "Escáner Fiorino",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#101216",
   "theme_color": "#121212",
-  "orientation": "portrait"
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
