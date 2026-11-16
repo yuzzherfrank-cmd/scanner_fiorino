@@ -36,6 +36,7 @@
 
         .container { max-width: 460px; margin: 0 auto; }
 
+        /* Cabecera y Progreso */
         .header {
             display: flex;
             justify-content: space-between;
@@ -58,6 +59,7 @@
         }
         .btn-icon.activo { background: #eab308; color: #000; border-color: #eab308; }
         .btn-icon.peligro { color: #fca5a5; }
+
         .btn-export {
             width: 100%;
             margin-top: 8px;
@@ -101,6 +103,7 @@
             transition: width 0.25s ease;
         }
 
+        /* Escáner */
         .scanner-wrap {
             position: relative;
             background: #000;
@@ -119,7 +122,7 @@
         }
         .scanner-controls button { flex: 1; }
 
-        /* Tarjeta de Resultado */
+        /* Tarjeta de Resultado (Protagonista) */
         #resultado {
             border-radius: 12px;
             padding: 16px 14px;
@@ -245,6 +248,7 @@
         }
         .btn-mini.copiado { background: #fef08a; color: #000; border-color: #fef08a; }
 
+        /* Paneles inferiores */
         .panel {
             background: var(--card);
             border: 1px solid var(--border);
@@ -305,7 +309,7 @@
             line-height: 1.35;
         }
 
-        /* Modal corregido para scroll táctil perfecto en Android */
+        /* Modal Lista de Control (scroll táctil robusto en Android) */
         .modal-backdrop {
             display: none;
             position: fixed;
@@ -389,6 +393,7 @@
         }
         .lista-row small { color: var(--muted); display: block; margin-top: 3px; font-family: monospace; }
 
+        /* Acordeón Multibulto */
         .multi-group {
             background: var(--card-2);
             border: 1px solid var(--border);
@@ -435,7 +440,7 @@
     <div class="header">
         <h1>Escáner Fiorino Pro</h1>
         <div class="header-actions">
-            <button id="btnSonido" class="btn-icon activo" onclick="toggleSonido()">🔊 Sonido</button>
+            <button id="btnSonido" class="btn-icon activo" onclick="toggleSonido()">🔊 Voz</button>
             <button class="btn-icon" onclick="abrirModal()">📋 Lista</button>
         </div>
     </div>
@@ -464,8 +469,8 @@
     </div>
 
     <div class="panel">
-        <label for="busquedaManual">Búsqueda rápida (últimos dígitos, calle o bloque):</label>
-        <input type="text" id="busquedaManual" placeholder="Ej: 51188X, Rubi o 221" oninput="buscarManual(this.value)">
+        <label for="busquedaManual">Búsqueda rápida (últimos dígitos, calle, barrio o bloque):</label>
+        <input type="text" id="busquedaManual" placeholder="Ej: 188X, Rubi o 221" oninput="buscarManual(this.value)">
         <div id="busquedaResultados" class="busqueda-resultados"></div>
     </div>
 
@@ -476,7 +481,6 @@
         </div>
         <div class="file-group">
             <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (GPS, notas y limpiar para Routin):</label>
-            <!-- Sin 'accept' restrictivo para evitar bloqueos en el selector de archivos de Android -->
             <input type="file" id="subirExcel" onchange="cargarExcel(event)">
             <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">⬇️ Descargar Excel limpio para Routin</button>
         </div>
@@ -508,8 +512,10 @@
 <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+    // ---------------- ESTADO GLOBAL ----------------
     const STORAGE_RUTA = "escaner_fiorino_ruta_v2";
     const STORAGE_EXCEL = "escaner_fiorino_excel_v2";
+    const COOLDOWN_MS = 2500;
 
     let html5QrCode = null;
     let isScannerRunning = false;
@@ -517,19 +523,23 @@
     let scannerBusy = false;
     let linternaActiva = false;
 
-    let sonidoActivo = true;
+    // "voz" (pitido + voz) | "pitido" (solo pitido) | "mudo"
+    let modoAudio = "voz";
     let audioCtx = null;
 
     let ultimoCodigoLeido = "";
     let ultimoTiempoLeido = 0;
-    const COOLDOWN_MS = 2500;
 
+    // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, escaneado }
     let mapaRuta = new Map();
+    // codigoBR -> { seq, stop, address, bairro, city, zip, lat, lon }
     let mapaExcel = new Map();
+    // grupoId -> { count, paradas: [number], codigos: [string] }
     let mapaGrupos = new Map();
+
     let tabActual = "faltantes";
 
-    // ---------------- AUDIO ----------------
+    // ---------------- AUDIO Y VOZ ----------------
     function desbloquearAudio() {
         if (!audioCtx) {
             const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -543,14 +553,33 @@
     document.addEventListener("click", desbloquearAudio, { passive: true });
 
     function toggleSonido() {
-        sonidoActivo = !sonidoActivo;
+        if (modoAudio === "voz") modoAudio = "pitido";
+        else if (modoAudio === "pitido") modoAudio = "mudo";
+        else modoAudio = "voz";
+
         const btn = document.getElementById("btnSonido");
-        btn.classList.toggle("activo", sonidoActivo);
-        btn.innerText = sonidoActivo ? "🔊 Sonido" : "🔇 Mudo";
+        btn.classList.toggle("activo", modoAudio !== "mudo");
+        if (modoAudio === "voz") btn.innerText = "🔊 Voz";
+        else if (modoAudio === "pitido") btn.innerText = "🔔 Pitido";
+        else btn.innerText = "🔇 Mudo";
+    }
+
+    function hablar(texto) {
+        if (modoAudio !== "voz" || !("speechSynthesis" in window)) return;
+        try {
+            if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(texto);
+            u.lang = "es-ES";
+            u.rate = 1.15;
+            u.pitch = 1;
+            u.volume = 1;
+            window.speechSynthesis.speak(u);
+        } catch (e) {}
     }
 
     function emitirBeep(tipo) {
-        if (!sonidoActivo || !audioCtx) return;
+        if (modoAudio === "mudo" || !audioCtx) return;
         if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
 
         const tocar = (freq, dur, delay = 0, wave = "sine") => {
@@ -591,15 +620,14 @@
         return { texto: "⬇️ PUERTA", color: "#166534" };
     }
 
-    // ---------------- CARGA DE EXCEL SHOPEE (.XLSX / .CSV) ----------------
+    // ---------------- EXCEL SHOPEE (.XLSX / .CSV) ----------------
     async function cargarExcel(e) {
         const archivo = e.target.files[0];
         if (!archivo) return;
 
         const estadoEl = document.getElementById("estadoCarga");
-        const nombreLow = archivo.name.toLowerCase();
-        if (!/\.(xlsx|xls|csv)$/i.test(nombreLow)) {
-            estadoEl.innerText = "❌ Por favor selecciona un archivo .xlsx, .xls o .csv de Shopee.";
+        if (!/\.(xlsx|xls|csv)$/i.test(archivo.name)) {
+            estadoEl.innerText = "❌ Selecciona un archivo .xlsx, .xls o .csv de Shopee.";
             estadoEl.style.color = "#f87171";
             e.target.value = "";
             return;
@@ -671,16 +699,10 @@
         }
     }
 
-    // ---------------- EXPORTAR EXCEL LIMPIO PARA ROUTIN ----------------
     function limpiarDireccionParaRoutin(address, bairro, city, zip) {
         let dir = String(address || "").replace(/(\d)\.(\d)/g, "$1$2").trim();
+        dir = dir.replace(/^R\.?\s+/i, "Rua ").replace(/^Av\.?\s+/i, "Avenida ");
 
-        // Estandarizar abreviaturas iniciales
-        dir = dir
-            .replace(/^R\.?\s+/i, "Rua ")
-            .replace(/^Av\.?\s+/i, "Avenida ");
-
-        // Quitar barrio pegado con guion antes de la coma (ej: "Brito-Joias de Santa Bárbara, 195")
         const partesComa = dir.split(",");
         if (partesComa.length >= 2) {
             const calleLimpia = partesComa[0].split("-")[0].trim();
@@ -738,7 +760,7 @@
         setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
 
-    // ---------------- CARGA DE PDF ROUTIN ----------------
+    // ---------------- LECTURA PDF ROUTIN (COORDENADAS X/Y) ----------------
     async function cargarPDF(e) {
         const archivo = e.target.files[0];
         if (!archivo) return;
@@ -754,7 +776,7 @@
             procesarLineasRuta(lineas);
         } catch (err) {
             console.error(err);
-            estadoEl.innerText = "Error al leer el PDF: " + err.message;
+            estadoEl.innerText = "❌ Error al leer el PDF: " + err.message;
             estadoEl.style.color = "#f87171";
         } finally {
             e.target.value = "";
@@ -952,6 +974,7 @@
                 const A = items[i], B = items[j];
                 const numA = A.parsed.num, numB = B.parsed.num;
 
+                // Nunca mezclar direcciones con números explícitos distintos (ej: 195 vs 200)
                 if (numA !== null && numB !== null && numA !== numB) continue;
 
                 const sim = similitudBigrams(A.parsed.calle, B.parsed.calle);
@@ -993,8 +1016,8 @@
 
     // ---------------- COMPLEMENTOS Y ALERTAS ----------------
     function extraerBlocoApto(texto) {
-        const mBl = texto.match(/\b(?:bloco|bl\.?)\s*([0-9A-Za-z]+)/i);
-        const mAp = texto.match(/\b(?:apartamento|apto\.?|apt\.?|ap\.?)\s*([0-9A-Za-z]+)/i);
+        const mBl = texto.match(/(?:^|[^a-z])(?:bloco|blo|bl\.?)\s*([0-9]+|[a-z](?=\b|\s|\/|-|$))/i);
+        const mAp = texto.match(/(?:^|[^a-z])(?:apartamento|aparta|apto\.?|apt\.?|ap\.?)\s*([0-9A-Za-z]+)/i);
         const partes = [];
         if (mBl) partes.push(`Bloco ${mBl[1].toUpperCase()}`);
         if (mAp) partes.push(`Apto ${mAp[1].toUpperCase()}`);
@@ -1078,13 +1101,19 @@
     function limpiarRuta() {
         if (mapaRuta.size === 0 && mapaExcel.size === 0) return;
         if (!confirm("¿Seguro que quieres borrar la ruta, el Excel y todo el progreso?")) return;
+
         mapaRuta.clear();
         mapaExcel.clear();
         mapaGrupos.clear();
         localStorage.removeItem(STORAGE_RUTA);
         localStorage.removeItem(STORAGE_EXCEL);
+
+        document.getElementById("busquedaManual").value = "";
+        document.getElementById("busquedaResultados").innerHTML = "";
         actualizarUIProgreso();
         actualizarEstadoCargaUI();
+        actualizarContadoresTabs();
+
         const caja = document.getElementById("resultado");
         caja.className = "";
         caja.innerHTML = `<div style="font-size:1.1rem; font-weight:700;">Esperando escaneo...</div>`;
@@ -1136,6 +1165,7 @@
             caja.className = "rojo";
             caja.innerHTML = `<div class="parada-num">SUBE TU PDF</div><div class="info-guia">Primero carga el PDF de Routin</div>`;
             emitirBeep("error");
+            setTimeout(() => hablar("Sube tu PDF primero"), 150);
             return;
         }
 
@@ -1144,6 +1174,7 @@
             caja.className = "rojo";
             caja.innerHTML = `<div class="parada-num">NO ESTÁ EN RUTA</div><div class="info-guia">${esc(codigoTrim)}</div>`;
             emitirBeep("error");
+            setTimeout(() => hablar("No está en ruta"), 150);
             if (navigator.vibrate) navigator.vibrate(250);
             return;
         }
@@ -1233,17 +1264,20 @@
 
         if (yaEstabaEscaneado) {
             emitirBeep("duplicado");
+            setTimeout(() => hablar(`Repetido. Parada ${datos.parada}`), 220);
             if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
         } else if (totalBultos > 1) {
             emitirBeep("multi");
+            setTimeout(() => hablar(`Parada ${datos.parada}. ${totalBultos} bultos`), 260);
             if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
         } else {
             emitirBeep("ok");
+            setTimeout(() => hablar(`Parada ${datos.parada}`), 150);
             if (navigator.vibrate) navigator.vibrate(150);
         }
     }
 
-    // ---------------- COPIADO RÁPIDO DE MENSAJES (CON Cód:) ----------------
+    // ---------------- COPIADO RÁPIDO DE MENSAJES ----------------
     async function copiarMensaje(btn, codigo, tipo) {
         const datos = mapaRuta.get(codigo);
         if (!datos) return;
@@ -1308,8 +1342,9 @@
         for (const [codigo, datos] of mapaRuta.entries()) {
             const enCodigo = codigo.includes(q);
             const enDir = datos.dirCompleta.toUpperCase().includes(q);
+            const enBairro = (datos.bairro || "").toUpperCase().includes(q);
             const enParada = String(datos.parada) === q;
-            if (enCodigo || enDir || enParada) coincidencias.push({ codigo, datos });
+            if (enCodigo || enDir || enBairro || enParada) coincidencias.push({ codigo, datos });
             if (coincidencias.length >= 6) break;
         }
 
@@ -1384,6 +1419,7 @@
                     const hayMatch = paquetes.some(p =>
                         p.codigo.includes(filtro) ||
                         p.dirCompleta.toUpperCase().includes(filtro) ||
+                        (p.bairro || "").toUpperCase().includes(filtro) ||
                         String(p.parada) === filtro
                     );
                     if (!hayMatch) continue;
@@ -1444,6 +1480,7 @@
                 return (
                     item.codigo.includes(filtro) ||
                     item.dirCompleta.toUpperCase().includes(filtro) ||
+                    (item.bairro || "").toUpperCase().includes(filtro) ||
                     String(item.parada) === filtro
                 );
             });
