@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
             --bg: #101216;
@@ -58,6 +58,20 @@
         }
         .btn-icon.activo { background: #eab308; color: #000; border-color: #eab308; }
         .btn-icon.peligro { color: #fca5a5; }
+        .btn-export {
+            width: 100%;
+            margin-top: 8px;
+            background: #1d4ed8;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: none;
+        }
+        .btn-export.visible { display: block; }
 
         .progreso-box {
             background: var(--card);
@@ -105,7 +119,7 @@
         }
         .scanner-controls button { flex: 1; }
 
-        /* Tarjeta de Resultado (Protagonista) */
+        /* Tarjeta de Resultado */
         #resultado {
             border-radius: 12px;
             padding: 16px 14px;
@@ -345,7 +359,6 @@
         .tab-btn.activa { background: var(--blue); color: #fff; border-color: var(--blue); }
         #filtroModal { flex-shrink: 0; }
 
-        /* IMPORTANTE: display:block evita que flexbox aplaste tarjetas con scroll */
         .lista-items {
             flex: 1 1 auto;
             min-height: 0;
@@ -376,7 +389,6 @@
         }
         .lista-row small { color: var(--muted); display: block; margin-top: 3px; font-family: monospace; }
 
-        /* Tarjetas agrupadas en Multibulto */
         .multi-group {
             background: var(--card-2);
             border: 1px solid var(--border);
@@ -463,8 +475,10 @@
             <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
         </div>
         <div class="file-group">
-            <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (Opcional: GPS y notas completas):</label>
-            <input type="file" id="subirExcel" accept=".xlsx,.xls,.csv" onchange="cargarExcel(event)">
+            <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (GPS, notas y limpiar para Routin):</label>
+            <!-- Sin 'accept' restrictivo para evitar bloqueos en el selector de archivos de Android -->
+            <input type="file" id="subirExcel" onchange="cargarExcel(event)">
+            <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">⬇️ Descargar Excel limpio para Routin</button>
         </div>
         <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
         <div style="margin-top:8px; display:flex; justify-content:flex-end;">
@@ -583,12 +597,20 @@
         if (!archivo) return;
 
         const estadoEl = document.getElementById("estadoCarga");
+        const nombreLow = archivo.name.toLowerCase();
+        if (!/\.(xlsx|xls|csv)$/i.test(nombreLow)) {
+            estadoEl.innerText = "❌ Por favor selecciona un archivo .xlsx, .xls o .csv de Shopee.";
+            estadoEl.style.color = "#f87171";
+            e.target.value = "";
+            return;
+        }
+
         estadoEl.innerText = "Leyendo planilla de Shopee...";
         estadoEl.style.color = "#9ca3af";
 
         try {
             if (typeof XLSX === "undefined") {
-                throw new Error("Librería Excel aún no cargada (revisa tu conexión la primera vez).");
+                throw new Error("Librería Excel no disponible. Recarga la página con internet una vez.");
             }
             const data = await archivo.arrayBuffer();
             const workbook = XLSX.read(data, { type: "array" });
@@ -598,7 +620,7 @@
             mapaExcel.clear();
 
             for (const row of rows) {
-                let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || "").trim().toUpperCase();
+                let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || row["Código"] || "").trim().toUpperCase();
                 if (!tn) {
                     for (const val of Object.values(row)) {
                         const m = String(val).match(/\b(BR[0-9A-Z]{13})\b/i);
@@ -607,8 +629,12 @@
                 }
                 if (!tn) continue;
 
-                const address = String(row["Destination Address"] || row["Address"] || row["Endereço"] || "").trim();
+                const seq = String(row["Sequence"] ?? "").trim();
+                const stop = String(row["Stop"] ?? "").trim();
+                const address = String(row["Destination Address"] || row["Address"] || row["Endereço"] || row["Dirección"] || "").trim();
                 const bairro = String(row["Bairro"] || row["Neighborhood"] || "").trim();
+                const city = String(row["City"] || row["Cidade"] || "").trim();
+                const zip = String(row["Zipcode/Postal code"] || row["CEP"] || row["Zipcode"] || "").trim();
                 const latRaw = String(row["Latitude"] || row["Lat"] || "").replace(",", ".").trim();
                 const lonRaw = String(row["Longitude"] || row["Lon"] || row["Lng"] || "").replace(",", ".").trim();
 
@@ -616,11 +642,19 @@
                 const lon = parseFloat(lonRaw);
 
                 mapaExcel.set(tn, {
+                    seq,
+                    stop,
                     address,
                     bairro,
+                    city,
+                    zip,
                     lat: Number.isFinite(lat) ? lat : null,
                     lon: Number.isFinite(lon) ? lon : null
                 });
+            }
+
+            if (mapaExcel.size === 0) {
+                throw new Error("No se encontraron códigos BR en esta planilla.");
             }
 
             if (mapaRuta.size > 0) {
@@ -630,11 +664,78 @@
             actualizarEstadoCargaUI();
         } catch (err) {
             console.error(err);
-            estadoEl.innerText = "Error al leer Excel: " + err.message;
+            estadoEl.innerText = "❌ Error al leer Excel: " + err.message;
             estadoEl.style.color = "#f87171";
         } finally {
             e.target.value = "";
         }
+    }
+
+    // ---------------- EXPORTAR EXCEL LIMPIO PARA ROUTIN ----------------
+    function limpiarDireccionParaRoutin(address, bairro, city, zip) {
+        let dir = String(address || "").replace(/(\d)\.(\d)/g, "$1$2").trim();
+
+        // Estandarizar abreviaturas iniciales
+        dir = dir
+            .replace(/^R\.?\s+/i, "Rua ")
+            .replace(/^Av\.?\s+/i, "Avenida ");
+
+        // Quitar barrio pegado con guion antes de la coma (ej: "Brito-Joias de Santa Bárbara, 195")
+        const partesComa = dir.split(",");
+        if (partesComa.length >= 2) {
+            const calleLimpia = partesComa[0].split("-")[0].trim();
+            const mNum = partesComa[1].match(/\d+/);
+            const num = mNum ? mNum[0] : "";
+            dir = num ? `${calleLimpia}, ${num}` : calleLimpia;
+        }
+
+        const extras = [bairro, city, zip].filter(Boolean).join(", ");
+        return extras ? `${dir}, ${extras}` : dir;
+    }
+
+    function descargarExcelLimpio() {
+        if (mapaExcel.size === 0) return;
+        if (typeof XLSX === "undefined") {
+            alert("La librería Excel no está cargada.");
+            return;
+        }
+
+        const filasLimpias = [];
+        for (const [tn, ex] of mapaExcel.entries()) {
+            const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
+            const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
+            const nombreRoutin = `${prefijoSeq}${ex.address}`;
+            const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+
+            filasLimpias.push({
+                "Nombre": nombreRoutin,
+                "Direccion": dirLimpia,
+                "Bairro": ex.bairro,
+                "Cidade": ex.city,
+                "CEP": ex.zip,
+                "SPX_TN": tn,
+                "Latitude": ex.lat !== null ? ex.lat : "",
+                "Longitude": ex.lon !== null ? ex.lon : ""
+            });
+        }
+
+        const ws = XLSX.utils.json_to_sheet(filasLimpias);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Routin_Limpio");
+
+        const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbOut], {
+            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const hoy = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `Routin_Limpio_${hoy}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
 
     // ---------------- CARGA DE PDF ROUTIN ----------------
@@ -949,6 +1050,9 @@
 
     function actualizarEstadoCargaUI(restaurado = false) {
         const estadoEl = document.getElementById("estadoCarga");
+        const btnExport = document.getElementById("btnExportarLimpio");
+        btnExport.classList.toggle("visible", mapaExcel.size > 0);
+
         if (mapaRuta.size === 0 && mapaExcel.size === 0) {
             estadoEl.innerText = "Esperando archivos...";
             estadoEl.style.color = "#9ca3af";
@@ -1268,7 +1372,6 @@
         const cont = document.getElementById("listaModalContenido");
         const filtro = document.getElementById("filtroModal").value.trim().toUpperCase();
 
-        // Vista agrupada limpia para Multibulto
         if (tabActual === "multi") {
             const grupos = [];
             for (const [gId, grp] of mapaGrupos.entries()) {
@@ -1331,7 +1434,6 @@
             return;
         }
 
-        // Vista estándar para Faltantes / Cargados
         const items = Array.from(mapaRuta.entries())
             .map(([codigo, datos]) => ({ codigo, ...datos }))
             .sort((a, b) => a.parada - b.parada)
