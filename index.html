@@ -358,7 +358,7 @@
     <div class="header">
         <h1>Escáner Fiorino Pro</h1>
         <div class="header-actions">
-            <button id="btnSonido" class="btn-icon activo" onclick="toggleSonido()">🔊 Sonido</button>
+            <button id="btnSonido" class="btn-icon activo" onclick="toggleSonido()">🗣️ Voz</button>
             <button class="btn-icon" onclick="abrirModal()">📋 Lista</button>
         </div>
     </div>
@@ -431,6 +431,7 @@
 
     const STORAGE_RUTA = "escaner_fiorino_ruta_v2";
     const STORAGE_EXCEL = "escaner_fiorino_excel_v2";
+    const STORAGE_AUDIO = "escaner_audio_modo";
 
     let html5QrCode = null;
     let isScannerRunning = false;
@@ -438,7 +439,8 @@
     let scannerBusy = false;
     let linternaActiva = false;
 
-    let sonidoActivo = true;
+    // Modos de sonido: "voz" | "beep" | "mudo"
+    let modoAudio = localStorage.getItem(STORAGE_AUDIO) || "voz";
     let audioCtx = null;
 
     let ultimoCodigoLeido = "";
@@ -447,14 +449,14 @@
 
     // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, escaneado }
     let mapaRuta = new Map();
-    // codigoBR -> { address, bairro, city, lat, lon }
+    // codigoBR -> { address, bairro, lat, lon }
     let mapaExcel = new Map();
     // grupoId -> { count, paradas: [number], codigos: [string] }
     let mapaGrupos = new Map();
 
     let tabActual = "faltantes";
 
-    // ---------------- AUDIO ----------------
+    // ---------------- AUDIO Y VOZ ----------------
     function desbloquearAudio() {
         if (!audioCtx) {
             const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -467,35 +469,76 @@
     document.addEventListener("touchstart", desbloquearAudio, { passive: true });
     document.addEventListener("click", desbloquearAudio, { passive: true });
 
-    function toggleSonido() {
-        sonidoActivo = !sonidoActivo;
+    function actualizarBtnSonido() {
         const btn = document.getElementById("btnSonido");
-        btn.classList.toggle("activo", sonidoActivo);
-        btn.innerText = sonidoActivo ? "🔊 Sonido" : "🔇 Mudo";
+        if (!btn) return;
+        if (modoAudio === "voz") {
+            btn.innerText = "🗣️ Voz";
+            btn.classList.add("activo");
+        } else if (modoAudio === "beep") {
+            btn.innerText = "🔔 Beep";
+            btn.classList.add("activo");
+        } else {
+            btn.innerText = "🔇 Mudo";
+            btn.classList.remove("activo");
+        }
     }
 
-    function emitirBeep(tipo) {
-        if (!sonidoActivo || !audioCtx) return;
-        if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    function toggleSonido() {
+        if (modoAudio === "voz") modoAudio = "beep";
+        else if (modoAudio === "beep") modoAudio = "mudo";
+        else modoAudio = "voz";
 
-        const tocar = (freq, dur, delay = 0, wave = "sine") => {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = wave;
-            osc.frequency.value = freq;
-            const start = audioCtx.currentTime + delay;
-            gain.gain.setValueAtTime(0.28, start);
-            gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(start);
-            osc.stop(start + dur);
-        };
+        localStorage.setItem(STORAGE_AUDIO, modoAudio);
+        actualizarBtnSonido();
 
-        if (tipo === "ok") tocar(920, 0.12);
-        else if (tipo === "multi") { tocar(900, 0.1, 0); tocar(1240, 0.15, 0.13); }
-        else if (tipo === "duplicado") { tocar(520, 0.1, 0, "triangle"); tocar(420, 0.12, 0.13, "triangle"); }
-        else if (tipo === "error") tocar(210, 0.35, 0, "sawtooth");
+        if (modoAudio !== "voz" && "speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+        }
+        if (modoAudio === "voz") hablarTexto("Voz activa");
+        else if (modoAudio === "beep") emitirBeep("ok");
+    }
+
+    function hablarTexto(texto) {
+        if (modoAudio !== "voz" || !("speechSynthesis" in window)) return;
+        try {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(texto);
+            u.lang = "es-ES";
+            u.rate = 1.15;
+            u.pitch = 1.0;
+            window.speechSynthesis.speak(u);
+        } catch (e) {}
+    }
+
+    function emitirBeep(tipo, textoVoz = "") {
+        if (modoAudio === "mudo") return;
+
+        if (audioCtx) {
+            if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+            const tocar = (freq, dur, delay = 0, wave = "sine") => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = wave;
+                osc.frequency.value = freq;
+                const start = audioCtx.currentTime + delay;
+                gain.gain.setValueAtTime(0.28, start);
+                gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(start);
+                osc.stop(start + dur);
+            };
+
+            if (tipo === "ok") tocar(920, 0.1);
+            else if (tipo === "multi") { tocar(900, 0.08, 0); tocar(1240, 0.12, 0.11); }
+            else if (tipo === "duplicado") { tocar(520, 0.09, 0, "triangle"); tocar(420, 0.1, 0.11, "triangle"); }
+            else if (tipo === "error") tocar(210, 0.3, 0, "sawtooth");
+        }
+
+        if (modoAudio === "voz" && textoVoz) {
+            setTimeout(() => hablarTexto(textoVoz), 160);
+        }
     }
 
     // ---------------- UTILIDADES ----------------
@@ -537,10 +580,8 @@
             mapaExcel.clear();
 
             for (const row of rows) {
-                // Buscar columna de código SPX TN / BR...
                 let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || "").trim().toUpperCase();
                 if (!tn) {
-                    // Fallback: buscar cualquier celda que tenga formato BR + 13 alfanuméricos
                     for (const val of Object.values(row)) {
                         const m = String(val).match(/\b(BR[0-9A-Z]{13})\b/i);
                         if (m) { tn = m[1].toUpperCase(); break; }
@@ -685,16 +726,14 @@
     // ---------------- ALGORITMO "SENTIDO COMÚN" (TEXTO + GPS + NÚMERO) ----------------
     function parsearDireccionInteligente(texto) {
         let limpio = String(texto || "")
-            .replace(/(\d)\.(\d)/g, "$1$2") // "2.123" -> "2123"
+            .replace(/(\d)\.(\d)/g, "$1$2")
             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
             .toLowerCase();
 
-        // Quitar prefijos comunes para igualar "Humberto De Lucca, 389" con "Rua Humberto de Lucca, 389"
         limpio = limpio
             .replace(/^(rua|r\.|r|avenida|av\.|av|travessa|tv\.|alameda|al\.|rodovia|rod\.|estrada|est\.|praca|pca\.|largo|viela|beco)\s+/i, "")
             .trim();
 
-        // Extraer calle base antes de la primera coma + número después de la coma
         let calle = "";
         let num = null;
         const mComa = limpio.match(/^([^,]+),\s*(\d+)\b/);
@@ -711,14 +750,12 @@
             }
         }
 
-        // Normalización fonética/ortográfica de errores frecuentes en calles
         calle = calle
             .replace(/schimidt/g, "schmidt")
             .replace(/[^a-z0-9\s]/g, " ")
             .replace(/\s+/g, " ")
             .trim();
 
-        // Si alguien escribió "geraldo pereira de brito-joias de santa barbara"
         const rawAntesComa = limpio.split(",")[0];
         const callePrincipal = rawAntesComa.split("-")[0]
             .replace(/schimidt/g, "schmidt")
@@ -737,7 +774,6 @@
         if (!a || !b) return 0;
         if (a === b) return 1;
         if (a.length < 2 || b.length < 2) return 0;
-        // Si una contiene completamente a la otra (ej: "geraldo pereira de brito" en "geraldo pereira de brito joias...")
         if (a.includes(b) || b.includes(a)) return 0.92;
 
         const getBigrams = (s) => {
@@ -769,7 +805,6 @@
     }
 
     function enriquecerYAgrupar() {
-        // 1. Enriquecer cada parada del PDF con los datos completos del Excel (si existe)
         const items = [];
         for (const [codigo, datos] of mapaRuta.entries()) {
             const ex = mapaExcel.get(codigo);
@@ -785,7 +820,6 @@
             items.push({ codigo, datos, parsed });
         }
 
-        // 2. Union-Find para agrupar con "sentido común"
         const n = items.length;
         const padre = Array.from({ length: n }, (_, i) => i);
         const find = (x) => (padre[x] === x ? x : (padre[x] = find(padre[x])));
@@ -799,8 +833,6 @@
                 const A = items[i], B = items[j];
                 const numA = A.parsed.num, numB = B.parsed.num;
 
-                // REGLA DE ORO: Si ambos tienen número y son distintos (ej: Rubi 195 vs Turquesa 200),
-                // NUNCA mezclar aunque estén a 20m por GPS.
                 if (numA !== null && numB !== null && numA !== numB) continue;
 
                 const sim = similitudBigrams(A.parsed.calle, B.parsed.calle);
@@ -809,9 +841,6 @@
                 let sonMismoLugar = false;
 
                 if (numA !== null && numA === numB) {
-                    // Mismo número de puerta:
-                    // - Misma calle o similar (incluso si el pin GPS cayó 100m adentro del condominio)
-                    // - O distinta calle escrita mal ("Rua Um, 200" vs "Geraldo Pereira, 200") pero muy cerca por GPS (<= 45m)
                     if (sim >= 0.72 || dist <= 45) {
                         sonMismoLugar = true;
                     }
@@ -820,7 +849,6 @@
                         sonMismoLugar = true;
                     }
                 } else {
-                    // Solo uno tiene número: exigir coincidencia muy fuerte en calle o pin casi idéntico (<= 12m)
                     if (sim >= 0.88 && dist <= 30) sonMismoLugar = true;
                     else if (dist <= 12) sonMismoLugar = true;
                 }
@@ -829,7 +857,6 @@
             }
         }
 
-        // 3. Construir mapaGrupos
         mapaGrupos.clear();
         for (let i = 0; i < n; i++) {
             const root = find(i);
@@ -991,7 +1018,7 @@
         if (mapaRuta.size === 0) {
             caja.className = "rojo";
             caja.innerHTML = `<div class="parada-num">SUBE TU PDF</div><div class="info-guia">Primero carga el PDF de Routin</div>`;
-            emitirBeep("error");
+            emitirBeep("error", "Sube tu PDF primero");
             return;
         }
 
@@ -999,7 +1026,7 @@
         if (!encontrado) {
             caja.className = "rojo";
             caja.innerHTML = `<div class="parada-num">NO ESTÁ EN RUTA</div><div class="info-guia">${esc(codigoTrim)}</div>`;
-            emitirBeep("error");
+            emitirBeep("error", "No está en ruta");
             if (navigator.vibrate) navigator.vibrate(250);
             return;
         }
@@ -1032,7 +1059,6 @@
                     mismosApto++;
                 }
             }
-            // Chips ordenados por parada
             const ordenados = grp.codigos
                 .map(c => mapaRuta.get(c))
                 .filter(Boolean)
@@ -1089,13 +1115,13 @@
         `;
 
         if (yaEstabaEscaneado) {
-            emitirBeep("duplicado");
+            emitirBeep("duplicado", `Repetido, ${datos.parada}`);
             if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
         } else if (totalBultos > 1) {
-            emitirBeep("multi");
+            emitirBeep("multi", `${datos.parada}, ${totalBultos} bultos`);
             if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
         } else {
-            emitirBeep("ok");
+            emitirBeep("ok", `${datos.parada}`);
             if (navigator.vibrate) navigator.vibrate(150);
         }
     }
@@ -1105,20 +1131,15 @@
         const datos = mapaRuta.get(codigo);
         if (!datos) return;
 
-        const grp = mapaGrupos.get(datos.grupoId);
-        const total = grp ? grp.count : 1;
-        const bloco = extraerBlocoApto(datos.dirCompleta);
-        const dirCorta = datos.dirCompleta.split(",").slice(0, 2).join(",");
-        const refLugar = bloco ? `${dirCorta} (${bloco})` : dirCorta;
-        const txtPacote = total > 1 ? `${total} pacotes seus` : "um pacote seu";
-
+        const ult4 = codigo.slice(-4);
         let msg = "";
+
         if (tipo === "camino") {
-            msg = `Olá! Sou entregador da Shopee, estou a caminho com ${txtPacote} para ${refLugar}. Vai ter alguém para receber?`;
+            msg = `Olá! Sou entregador da Shopee e estou a caminho do seu endereço agora. Por favor, fique atento(a) para receber o seu pedido. Cód: ${ult4}`;
         } else if (tipo === "puerta") {
-            msg = `Olá! Estou na frente/portaria com sua entrega da Shopee (${refLugar}). Pode receber agora?`;
+            msg = `Olá! Sou entregador da Shopee e já estou aqui na frente (ou portaria) com o seu pedido. Pode vir receber, por favor? Cód: ${ult4}`;
         } else {
-            msg = `Olá! Passei agora no endereço (${refLugar}) com sua entrega da Shopee, mas ninguém atendeu. Tem alguém ou algum vizinho autorizado que possa receber?`;
+            msg = `Olá! Chamei no seu endereço com sua entrega da Shopee, mas não recebi resposta. Deseja que algum vizinho receba por você? Se sim, me informe o número da casa, por favor. Cód: ${ult4}`;
         }
 
         try {
@@ -1352,6 +1373,7 @@
     });
 
     window.addEventListener("DOMContentLoaded", () => {
+        actualizarBtnSonido();
         restaurarEstado();
         iniciarEscaner();
         if ("serviceWorker" in navigator) {
