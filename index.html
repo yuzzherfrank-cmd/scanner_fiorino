@@ -8,6 +8,7 @@
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <style>
         :root {
             --bg: #101216;
@@ -35,7 +36,6 @@
 
         .container { max-width: 460px; margin: 0 auto; }
 
-        /* Cabecera y Progreso */
         .header {
             display: flex;
             justify-content: space-between;
@@ -51,7 +51,7 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 7px 10px;
-            font-size: 0.85rem;
+            font-size: 0.84rem;
             font-weight: 600;
             cursor: pointer;
         }
@@ -86,7 +86,6 @@
             transition: width 0.25s ease;
         }
 
-        /* Escáner */
         .scanner-wrap {
             position: relative;
             background: #000;
@@ -105,7 +104,7 @@
         }
         .scanner-controls button { flex: 1; }
 
-        /* Tarjeta de Resultado */
+        /* Tarjeta de Resultado (Protagonista) */
         #resultado {
             border-radius: 12px;
             padding: 16px 14px;
@@ -126,7 +125,7 @@
             gap: 10px;
             flex-wrap: wrap;
         }
-        .parada-num { font-size: 2rem; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1; }
+        .parada-num { font-size: 2.05rem; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1; }
         .zona-badge {
             font-size: 0.85rem;
             font-weight: 800;
@@ -139,18 +138,35 @@
         .estado-tag {
             display: inline-block;
             margin-top: 6px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 700;
             padding: 3px 9px;
             border-radius: 6px;
             background: rgba(0, 0, 0, 0.28);
         }
+        .alertas-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        .alerta-pill {
+            font-size: 0.74rem;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: #fef08a;
+            color: #422006;
+        }
+        .alerta-pill.nota { background: #fed7aa; color: #431407; }
+
         .info-bultos {
             margin-top: 10px;
             padding: 8px 10px;
             border-radius: 8px;
-            background: rgba(0, 0, 0, 0.25);
-            font-size: 1rem;
+            background: rgba(0, 0, 0, 0.28);
+            font-size: 0.98rem;
             font-weight: 700;
             color: #fef08a;
         }
@@ -175,10 +191,15 @@
         }
         .info-direccion {
             margin-top: 10px;
-            font-size: 0.95rem;
+            font-size: 0.96rem;
             line-height: 1.35;
-            font-weight: 500;
+            font-weight: 600;
             color: #fff;
+        }
+        .info-bairro {
+            margin-top: 3px;
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.85);
         }
         .info-guia {
             margin-top: 6px;
@@ -186,18 +207,31 @@
             color: rgba(255, 255, 255, 0.78);
             font-family: monospace;
         }
-        .btn-desmarcar {
-            margin-top: 10px;
-            background: rgba(0, 0, 0, 0.35);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            cursor: pointer;
-        }
 
-        /* Paneles de búsqueda y PDF */
+        /* Acciones rápidas en la tarjeta */
+        .quick-actions {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-mini {
+            background: rgba(0, 0, 0, 0.32);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.32);
+            border-radius: 6px;
+            padding: 5px 9px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn-mini.copiado { background: #fef08a; color: #000; border-color: #fef08a; }
+
+        /* Paneles inferiores */
         .panel {
             background: var(--card);
             border: 1px solid var(--border);
@@ -207,19 +241,22 @@
         }
         .panel label {
             display: block;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 700;
-            margin-bottom: 6px;
+            margin-bottom: 5px;
             color: var(--muted);
         }
+        .file-group { margin-bottom: 10px; }
+        .file-group:last-of-type { margin-bottom: 0; }
+
         input[type="text"], input[type="file"] {
             width: 100%;
             background: var(--card-2);
             color: var(--text);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 10px;
-            font-size: 0.95rem;
+            padding: 9px 10px;
+            font-size: 0.92rem;
         }
         .busqueda-resultados {
             margin-top: 8px;
@@ -236,7 +273,7 @@
             padding: 8px 10px;
             border-radius: 8px;
             border: 1px solid var(--border);
-            font-size: 0.85rem;
+            font-size: 0.84rem;
         }
         .busqueda-item button {
             background: var(--blue);
@@ -248,19 +285,19 @@
             white-space: nowrap;
             cursor: pointer;
         }
-
         .estado-carga {
             margin-top: 8px;
-            font-size: 0.85rem;
+            font-size: 0.83rem;
             color: var(--muted);
+            line-height: 1.35;
         }
 
-        /* Modal de Lista */
+        /* Modal */
         .modal-backdrop {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.82);
             z-index: 100;
             padding: 12px;
             overflow-y: auto;
@@ -280,11 +317,7 @@
             align-items: center;
             margin-bottom: 10px;
         }
-        .tabs {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 10px;
-        }
+        .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
         .tab-btn {
             flex: 1;
             background: var(--card-2);
@@ -297,7 +330,6 @@
             cursor: pointer;
         }
         .tab-btn.activa { background: var(--blue); color: #fff; border-color: var(--blue); }
-
         .lista-items {
             max-height: 60vh;
             overflow-y: auto;
@@ -355,15 +387,21 @@
     </div>
 
     <div class="panel">
-        <label for="busquedaManual">Búsqueda rápida (últimos 4-6 dígitos o calle):</label>
-        <input type="text" id="busquedaManual" placeholder="Ej: 51188X o Portugal" oninput="buscarManual(this.value)">
+        <label for="busquedaManual">Búsqueda rápida (últimos dígitos, calle o bloque):</label>
+        <input type="text" id="busquedaManual" placeholder="Ej: 51188X, Rubi o 221" oninput="buscarManual(this.value)">
         <div id="busquedaResultados" class="busqueda-resultados"></div>
     </div>
 
     <div class="panel">
-        <label for="subirPdf">Cargar PDF optimizado de Routin:</label>
-        <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
-        <div id="estadoCarga" class="estado-carga">Esperando archivo PDF...</div>
+        <div class="file-group">
+            <label for="subirPdf">1. PDF de Routin (Orden de paradas):</label>
+            <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
+        </div>
+        <div class="file-group">
+            <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (Opcional: GPS y notas completas):</label>
+            <input type="file" id="subirExcel" accept=".xlsx,.xls,.csv" onchange="cargarExcel(event)">
+        </div>
+        <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
         <div style="margin-top:8px; display:flex; justify-content:flex-end;">
             <button class="btn-icon peligro" onclick="limpiarRuta()">🗑️ Limpiar ruta guardada</button>
         </div>
@@ -371,7 +409,7 @@
 
 </div>
 
-<!-- Modal Lista de Paquetes -->
+<!-- Modal Lista de Control -->
 <div id="modalLista" class="modal-backdrop" onclick="if(event.target === this) cerrarModal()">
     <div class="modal-box">
         <div class="modal-header">
@@ -383,7 +421,7 @@
             <button class="tab-btn" id="tabCargados" onclick="cambiarTab('cargados')">Cargados</button>
             <button class="tab-btn" id="tabMulti" onclick="cambiarTab('multi')">Multibulto</button>
         </div>
-        <input type="text" id="filtroModal" placeholder="Filtrar por parada, calle o BR..." oninput="renderizarListaModal()">
+        <input type="text" id="filtroModal" placeholder="Filtrar por parada, calle, bloque o BR..." oninput="renderizarListaModal()">
         <div id="listaModalContenido" class="lista-items"></div>
     </div>
 </div>
@@ -391,7 +429,8 @@
 <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    const STORAGE_KEY = "escaner_fiorino_ruta_v1";
+    const STORAGE_RUTA = "escaner_fiorino_ruta_v2";
+    const STORAGE_EXCEL = "escaner_fiorino_excel_v2";
 
     let html5QrCode = null;
     let isScannerRunning = false;
@@ -406,10 +445,13 @@
     let ultimoTiempoLeido = 0;
     const COOLDOWN_MS = 2500;
 
-    // codigoBR -> { parada, refShopee, dirNorm, dirVisible, escaneado }
+    // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, escaneado }
     let mapaRuta = new Map();
-    // dirNorm -> { count, paradas: [number] }
-    let mapaDirecciones = new Map();
+    // codigoBR -> { address, bairro, city, lat, lon }
+    let mapaExcel = new Map();
+    // grupoId -> { count, paradas: [number], codigos: [string] }
+    let mapaGrupos = new Map();
+
     let tabActual = "faltantes";
 
     // ---------------- AUDIO ----------------
@@ -458,7 +500,7 @@
 
     // ---------------- UTILIDADES ----------------
     function esc(str) {
-        return String(str)
+        return String(str || "")
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -474,7 +516,69 @@
         return { texto: "⬇️ PUERTA", color: "#166534" };
     }
 
-    // ---------------- LECTURA Y PARSEO PDF (POR COORDENADAS Y) ----------------
+    // ---------------- CARGA DE EXCEL SHOPEE (.XLSX / .CSV) ----------------
+    async function cargarExcel(e) {
+        const archivo = e.target.files[0];
+        if (!archivo) return;
+
+        const estadoEl = document.getElementById("estadoCarga");
+        estadoEl.innerText = "Leyendo planilla de Shopee...";
+        estadoEl.style.color = "#9ca3af";
+
+        try {
+            if (typeof XLSX === "undefined") {
+                throw new Error("Librería Excel aún no cargada (revisa tu conexión la primera vez).");
+            }
+            const data = await archivo.arrayBuffer();
+            const workbook = XLSX.read(data, { type: "array" });
+            const sheetName = workbook.SheetNames[0];
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+
+            mapaExcel.clear();
+
+            for (const row of rows) {
+                // Buscar columna de código SPX TN / BR...
+                let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || "").trim().toUpperCase();
+                if (!tn) {
+                    // Fallback: buscar cualquier celda que tenga formato BR + 13 alfanuméricos
+                    for (const val of Object.values(row)) {
+                        const m = String(val).match(/\b(BR[0-9A-Z]{13})\b/i);
+                        if (m) { tn = m[1].toUpperCase(); break; }
+                    }
+                }
+                if (!tn) continue;
+
+                const address = String(row["Destination Address"] || row["Address"] || row["Endereço"] || "").trim();
+                const bairro = String(row["Bairro"] || row["Neighborhood"] || "").trim();
+                const latRaw = String(row["Latitude"] || row["Lat"] || "").replace(",", ".").trim();
+                const lonRaw = String(row["Longitude"] || row["Lon"] || row["Lng"] || "").replace(",", ".").trim();
+
+                const lat = parseFloat(latRaw);
+                const lon = parseFloat(lonRaw);
+
+                mapaExcel.set(tn, {
+                    address,
+                    bairro,
+                    lat: Number.isFinite(lat) ? lat : null,
+                    lon: Number.isFinite(lon) ? lon : null
+                });
+            }
+
+            if (mapaRuta.size > 0) {
+                enriquecerYAgrupar();
+            }
+            guardarEstado();
+            actualizarEstadoCargaUI();
+        } catch (err) {
+            console.error(err);
+            estadoEl.innerText = "Error al leer Excel: " + err.message;
+            estadoEl.style.color = "#f87171";
+        } finally {
+            e.target.value = "";
+        }
+    }
+
+    // ---------------- CARGA DE PDF ROUTIN ----------------
     async function cargarPDF(e) {
         const archivo = e.target.files[0];
         if (!archivo) return;
@@ -491,7 +595,7 @@
         } catch (err) {
             console.error(err);
             estadoEl.innerText = "Error al leer el PDF: " + err.message;
-            estadoEl.style.color = "#ef4444";
+            estadoEl.style.color = "#f87171";
         } finally {
             e.target.value = "";
         }
@@ -527,31 +631,6 @@
         return lineasTotales;
     }
 
-    function normalizarDireccion(texto) {
-        // Corrige números con punto (ej: "2.123" -> "2123")
-        let limpio = texto.replace(/(\d)\.(\d)/g, "$1$2");
-
-        // Estandariza abreviaturas
-        limpio = limpio
-            .replace(/\bAv\.?\s+/gi, "Avenida ")
-            .replace(/\bR\.?\s+/gi, "Rua ")
-            .replace(/\bPça\.?\s+/gi, "Praça ")
-            .replace(/\bEst\.?\s+/gi, "Estrada ");
-
-        const matchDir = limpio.match(
-            /((?:Rua|Avenida|Travessa|Alameda|Rodovia|Estrada|Praça|Praca|Largo|Viela|Beco)\s+[^,]+,\s*\d+)/i
-        );
-        if (matchDir) {
-            return matchDir[1]
-                .toLowerCase()
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .replace(/\s+/g, " ")
-                .trim();
-        }
-        return null;
-    }
-
     function procesarLineasRuta(lineas) {
         mapaRuta.clear();
         let bufferTexto = [];
@@ -577,14 +656,17 @@
                     detalle = matchRef[2];
                 }
 
-                const dirVisible = detalle.replace(/\.{2,}\s*$/, "").trim();
-                const dirNorm = normalizarDireccion(dirVisible) || `parada_${numParada}`;
+                const dirPDF = detalle.replace(/\.{2,}\s*$/, "").trim();
 
                 mapaRuta.set(codigoBR, {
                     parada: numParada,
                     refShopee,
-                    dirNorm,
-                    dirVisible,
+                    dirPDF,
+                    dirCompleta: dirPDF,
+                    bairro: "",
+                    lat: null,
+                    lon: null,
+                    grupoId: "",
                     escaneado: false
                 });
 
@@ -594,39 +676,210 @@
             }
         }
 
-        reconstruirMapaDirecciones();
+        enriquecerYAgrupar();
         guardarEstado();
         actualizarUIProgreso();
+        actualizarEstadoCargaUI();
+    }
 
-        const estadoEl = document.getElementById("estadoCarga");
-        if (mapaRuta.size > 0) {
-            estadoEl.innerText = `✅ Ruta lista: ${mapaRuta.size} paquetes en ${mapaDirecciones.size} direcciones.`;
-            estadoEl.style.color = "#4ade80";
+    // ---------------- ALGORITMO "SENTIDO COMÚN" (TEXTO + GPS + NÚMERO) ----------------
+    function parsearDireccionInteligente(texto) {
+        let limpio = String(texto || "")
+            .replace(/(\d)\.(\d)/g, "$1$2") // "2.123" -> "2123"
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase();
+
+        // Quitar prefijos comunes para igualar "Humberto De Lucca, 389" con "Rua Humberto de Lucca, 389"
+        limpio = limpio
+            .replace(/^(rua|r\.|r|avenida|av\.|av|travessa|tv\.|alameda|al\.|rodovia|rod\.|estrada|est\.|praca|pca\.|largo|viela|beco)\s+/i, "")
+            .trim();
+
+        // Extraer calle base antes de la primera coma + número después de la coma
+        let calle = "";
+        let num = null;
+        const mComa = limpio.match(/^([^,]+),\s*(\d+)\b/);
+        if (mComa) {
+            calle = mComa[1];
+            num = mComa[2];
         } else {
-            estadoEl.innerText = "❌ No se encontraron códigos BR válidos en el PDF.";
-            estadoEl.style.color = "#f87171";
+            const mEsp = limpio.match(/^(.+?)\s+(\d+)\b/);
+            if (mEsp) {
+                calle = mEsp[1];
+                num = mEsp[2];
+            } else {
+                calle = limpio.split(",")[0];
+            }
+        }
+
+        // Normalización fonética/ortográfica de errores frecuentes en calles
+        calle = calle
+            .replace(/schimidt/g, "schmidt")
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        // Si alguien escribió "geraldo pereira de brito-joias de santa barbara"
+        const rawAntesComa = limpio.split(",")[0];
+        const callePrincipal = rawAntesComa.split("-")[0]
+            .replace(/schimidt/g, "schmidt")
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        return {
+            calle: callePrincipal || calle,
+            calleFull: calle,
+            num
+        };
+    }
+
+    function similitudBigrams(a, b) {
+        if (!a || !b) return 0;
+        if (a === b) return 1;
+        if (a.length < 2 || b.length < 2) return 0;
+        // Si una contiene completamente a la otra (ej: "geraldo pereira de brito" en "geraldo pereira de brito joias...")
+        if (a.includes(b) || b.includes(a)) return 0.92;
+
+        const getBigrams = (s) => {
+            const set = new Map();
+            for (let i = 0; i < s.length - 1; i++) {
+                const bg = s.slice(i, i + 2);
+                set.set(bg, (set.get(bg) || 0) + 1);
+            }
+            return set;
+        };
+        const bgA = getBigrams(a);
+        const bgB = getBigrams(b);
+        let inter = 0;
+        for (const [bg, count] of bgA.entries()) {
+            if (bgB.has(bg)) inter += Math.min(count, bgB.get(bg));
+        }
+        return (2 * inter) / ((a.length - 1) + (b.length - 1));
+    }
+
+    function distanciaMetros(lat1, lon1, lat2, lon2) {
+        if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
+        const R = 6371000;
+        const toRad = (g) => g * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function enriquecerYAgrupar() {
+        // 1. Enriquecer cada parada del PDF con los datos completos del Excel (si existe)
+        const items = [];
+        for (const [codigo, datos] of mapaRuta.entries()) {
+            const ex = mapaExcel.get(codigo);
+            if (ex) {
+                datos.dirCompleta = ex.address || datos.dirPDF;
+                datos.bairro = ex.bairro || "";
+                datos.lat = ex.lat;
+                datos.lon = ex.lon;
+            } else {
+                datos.dirCompleta = datos.dirPDF;
+            }
+            const parsed = parsearDireccionInteligente(datos.dirCompleta);
+            items.push({ codigo, datos, parsed });
+        }
+
+        // 2. Union-Find para agrupar con "sentido común"
+        const n = items.length;
+        const padre = Array.from({ length: n }, (_, i) => i);
+        const find = (x) => (padre[x] === x ? x : (padre[x] = find(padre[x])));
+        const union = (a, b) => {
+            const ra = find(a), rb = find(b);
+            if (ra !== rb) padre[rb] = ra;
+        };
+
+        for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+                const A = items[i], B = items[j];
+                const numA = A.parsed.num, numB = B.parsed.num;
+
+                // REGLA DE ORO: Si ambos tienen número y son distintos (ej: Rubi 195 vs Turquesa 200),
+                // NUNCA mezclar aunque estén a 20m por GPS.
+                if (numA !== null && numB !== null && numA !== numB) continue;
+
+                const sim = similitudBigrams(A.parsed.calle, B.parsed.calle);
+                const dist = distanciaMetros(A.datos.lat, A.datos.lon, B.datos.lat, B.datos.lon);
+
+                let sonMismoLugar = false;
+
+                if (numA !== null && numA === numB) {
+                    // Mismo número de puerta:
+                    // - Misma calle o similar (incluso si el pin GPS cayó 100m adentro del condominio)
+                    // - O distinta calle escrita mal ("Rua Um, 200" vs "Geraldo Pereira, 200") pero muy cerca por GPS (<= 45m)
+                    if (sim >= 0.72 || dist <= 45) {
+                        sonMismoLugar = true;
+                    }
+                } else if (numA === null && numB === null) {
+                    if (sim >= 0.85 || dist <= 18) {
+                        sonMismoLugar = true;
+                    }
+                } else {
+                    // Solo uno tiene número: exigir coincidencia muy fuerte en calle o pin casi idéntico (<= 12m)
+                    if (sim >= 0.88 && dist <= 30) sonMismoLugar = true;
+                    else if (dist <= 12) sonMismoLugar = true;
+                }
+
+                if (sonMismoLugar) union(i, j);
+            }
+        }
+
+        // 3. Construir mapaGrupos
+        mapaGrupos.clear();
+        for (let i = 0; i < n; i++) {
+            const root = find(i);
+            const gId = `grp_${root}`;
+            items[i].datos.grupoId = gId;
+
+            if (!mapaGrupos.has(gId)) {
+                mapaGrupos.set(gId, { count: 0, paradas: [], codigos: [] });
+            }
+            const grp = mapaGrupos.get(gId);
+            grp.count += 1;
+            grp.paradas.push(items[i].datos.parada);
+            grp.codigos.push(items[i].codigo);
+        }
+
+        for (const grp of mapaGrupos.values()) {
+            grp.paradas.sort((a, b) => a - b);
         }
     }
 
-    function reconstruirMapaDirecciones() {
-        mapaDirecciones.clear();
-        for (const datos of mapaRuta.values()) {
-            if (!mapaDirecciones.has(datos.dirNorm)) {
-                mapaDirecciones.set(datos.dirNorm, { count: 0, paradas: [] });
-            }
-            const info = mapaDirecciones.get(datos.dirNorm);
-            info.count += 1;
-            info.paradas.push(datos.parada);
+    // ---------------- EXTRACCIÓN DE COMPLEMENTOS Y ALERTAS ----------------
+    function extraerBlocoApto(texto) {
+        const mBl = texto.match(/\b(?:bloco|bl\.?)\s*([0-9A-Za-z]+)/i);
+        const mAp = texto.match(/\b(?:apartamento|apto\.?|apt\.?|ap\.?)\s*([0-9A-Za-z]+)/i);
+        const partes = [];
+        if (mBl) partes.push(`Bloco ${mBl[1].toUpperCase()}`);
+        if (mAp) partes.push(`Apto ${mAp[1].toUpperCase()}`);
+        return partes.join(" / ");
+    }
+
+    function detectarAlertas(texto) {
+        const alertas = [];
+        const t = texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda)\b/.test(t)) {
+            alertas.push({ texto: "🏢 COMERCIO / HORARIO", tipo: "" });
         }
-        for (const info of mapaDirecciones.values()) {
-            info.paradas.sort((a, b) => a - b);
+        if (/\b(condominio|cond\.|conde\.|bloco|bl\s*\d|apto|apartamento|portaria)\b/.test(t)) {
+            alertas.push({ texto: "🏘️ CONDOMINIO", tipo: "" });
         }
+        if (/\b(nao jogar|não jogar|quintal|portao|fundo|frente|placa|entregar|vizinho)\b/.test(t)) {
+            alertas.push({ texto: "⚠️ LEER NOTA", tipo: "nota" });
+        }
+        return alertas;
     }
 
     // ---------------- PERSISTENCIA ----------------
     function guardarEstado() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(mapaRuta.entries())));
+            localStorage.setItem(STORAGE_RUTA, JSON.stringify(Array.from(mapaRuta.entries())));
+            localStorage.setItem(STORAGE_EXCEL, JSON.stringify(Array.from(mapaExcel.entries())));
         } catch (e) {
             console.warn("No se pudo guardar en localStorage:", e);
         }
@@ -634,31 +887,60 @@
 
     function restaurarEstado() {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return;
-            const entries = JSON.parse(raw);
-            if (Array.isArray(entries) && entries.length > 0) {
-                mapaRuta = new Map(entries);
-                reconstruirMapaDirecciones();
-                actualizarUIProgreso();
-                const estadoEl = document.getElementById("estadoCarga");
-                estadoEl.innerText = `♻️ Ruta restaurada: ${mapaRuta.size} paquetes en ${mapaDirecciones.size} direcciones.`;
-                estadoEl.style.color = "#4ade80";
+            const rawEx = localStorage.getItem(STORAGE_EXCEL);
+            if (rawEx) mapaExcel = new Map(JSON.parse(rawEx));
+
+            const rawRuta = localStorage.getItem(STORAGE_RUTA);
+            if (rawRuta) {
+                const entries = JSON.parse(rawRuta);
+                if (Array.isArray(entries) && entries.length > 0) {
+                    mapaRuta = new Map(entries);
+                    enriquecerYAgrupar();
+                    actualizarUIProgreso();
+                    actualizarEstadoCargaUI(true);
+                }
+            } else if (mapaExcel.size > 0) {
+                actualizarEstadoCargaUI(true);
             }
         } catch (e) {
             console.warn("Error restaurando estado:", e);
         }
     }
 
+    function actualizarEstadoCargaUI(restaurado = false) {
+        const estadoEl = document.getElementById("estadoCarga");
+        if (mapaRuta.size === 0 && mapaExcel.size === 0) {
+            estadoEl.innerText = "Esperando archivos...";
+            estadoEl.style.color = "#9ca3af";
+            return;
+        }
+
+        let cruzados = 0;
+        for (const cod of mapaRuta.keys()) {
+            if (mapaExcel.has(cod)) cruzados++;
+        }
+
+        const partes = [];
+        if (mapaRuta.size > 0) {
+            partes.push(`${restaurado ? "♻️" : "✅"} PDF: ${mapaRuta.size} paquetes (${mapaGrupos.size} direcciones)`);
+        }
+        if (mapaExcel.size > 0) {
+            partes.push(`📊 Excel: ${mapaExcel.size} filas` + (mapaRuta.size > 0 ? ` (${cruzados} cruzados con GPS)` : ""));
+        }
+        estadoEl.innerText = partes.join(" • ");
+        estadoEl.style.color = "#4ade80";
+    }
+
     function limpiarRuta() {
-        if (mapaRuta.size === 0) return;
-        if (!confirm("¿Seguro que quieres borrar la ruta actual y todo el progreso?")) return;
+        if (mapaRuta.size === 0 && mapaExcel.size === 0) return;
+        if (!confirm("¿Seguro que quieres borrar la ruta, el Excel y todo el progreso?")) return;
         mapaRuta.clear();
-        mapaDirecciones.clear();
-        localStorage.removeItem(STORAGE_KEY);
+        mapaExcel.clear();
+        mapaGrupos.clear();
+        localStorage.removeItem(STORAGE_RUTA);
+        localStorage.removeItem(STORAGE_EXCEL);
         actualizarUIProgreso();
-        document.getElementById("estadoCarga").innerText = "Esperando archivo PDF...";
-        document.getElementById("estadoCarga").style.color = "#9ca3af";
+        actualizarEstadoCargaUI();
         const caja = document.getElementById("resultado");
         caja.className = "";
         caja.innerHTML = `<div style="font-size:1.1rem; font-weight:700;">Esperando escaneo...</div>`;
@@ -679,16 +961,13 @@
     // ---------------- PROCESAMIENTO DE LECTURA ----------------
     function buscarCodigoEnRuta(codigoRaw) {
         const limpio = codigoRaw.trim().toUpperCase();
-
         if (mapaRuta.has(limpio)) return { codigo: limpio, datos: mapaRuta.get(limpio) };
 
-        // Si el QR trae texto alrededor o URL, extraemos el BR...
         const matchSub = limpio.match(/\b(BR[0-9A-Z]{13})\b/);
         if (matchSub && mapaRuta.has(matchSub[1])) {
             return { codigo: matchSub[1], datos: mapaRuta.get(matchSub[1]) };
         }
 
-        // Último recurso por error óptico S/5 o O/0
         const norm = (s) => s.replace(/S/g, "5").replace(/O/g, "0");
         const buscadoNorm = norm(matchSub ? matchSub[1] : limpio);
         for (const [cod, datos] of mapaRuta.entries()) {
@@ -702,9 +981,7 @@
         const codigoTrim = codigoRaw.trim().toUpperCase();
 
         if (!esManual) {
-            if (codigoTrim === ultimoCodigoLeido && (ahora - ultimoTiempoLeido) < COOLDOWN_MS) {
-                return; // Evita múltiples disparos continuos
-            }
+            if (codigoTrim === ultimoCodigoLeido && (ahora - ultimoTiempoLeido) < COOLDOWN_MS) return;
             ultimoCodigoLeido = codigoTrim;
             ultimoTiempoLeido = ahora;
         }
@@ -713,19 +990,15 @@
 
         if (mapaRuta.size === 0) {
             caja.className = "rojo";
-            caja.innerHTML = `<div class="parada-num">SUBE TU PDF</div><div class="info-guia">No hay ninguna ruta cargada</div>`;
+            caja.innerHTML = `<div class="parada-num">SUBE TU PDF</div><div class="info-guia">Primero carga el PDF de Routin</div>`;
             emitirBeep("error");
             return;
         }
 
         const encontrado = buscarCodigoEnRuta(codigoTrim);
-
         if (!encontrado) {
             caja.className = "rojo";
-            caja.innerHTML = `
-                <div class="parada-num">NO ESTÁ EN RUTA</div>
-                <div class="info-guia">${esc(codigoTrim)}</div>
-            `;
+            caja.innerHTML = `<div class="parada-num">NO ESTÁ EN RUTA</div><div class="info-guia">${esc(codigoTrim)}</div>`;
             emitirBeep("error");
             if (navigator.vibrate) navigator.vibrate(250);
             return;
@@ -740,28 +1013,54 @@
             actualizarUIProgreso();
         }
 
-        const infoDir = mapaDirecciones.get(datos.dirNorm);
-        const totalBultos = infoDir ? infoDir.count : 1;
+        const grp = mapaGrupos.get(datos.grupoId);
+        const totalBultos = grp ? grp.count : 1;
         const zona = obtenerZonaFiorino(datos.parada, mapaRuta.size);
+        const blocoApto = extraerBlocoApto(datos.dirCompleta);
+        const alertas = detectarAlertas(datos.dirCompleta);
 
-        // Calcular cuántos de esa misma dirección ya fueron escaneados
         let escaneadosDir = 0;
+        let mismosApto = 0;
         let chipsHtml = "";
-        if (infoDir && totalBultos > 1) {
-            for (const numP of infoDir.paradas) {
-                const pkg = Array.from(mapaRuta.values()).find(x => x.parada === numP);
-                const ok = pkg && pkg.escaneado;
-                if (ok) escaneadosDir++;
-                chipsHtml += `<span class="chip-parada ${ok ? "ok" : ""}">#${numP}${ok ? " ✓" : ""}</span>`;
+
+        if (grp && totalBultos > 1) {
+            for (const codGrp of grp.codigos) {
+                const pkg = mapaRuta.get(codGrp);
+                if (!pkg) continue;
+                if (pkg.escaneado) escaneadosDir++;
+                if (blocoApto && codGrp !== codigo && extraerBlocoApto(pkg.dirCompleta) === blocoApto) {
+                    mismosApto++;
+                }
+            }
+            // Chips ordenados por parada
+            const ordenados = grp.codigos
+                .map(c => mapaRuta.get(c))
+                .filter(Boolean)
+                .sort((a, b) => a.parada - b.parada);
+            for (const pkg of ordenados) {
+                chipsHtml += `<span class="chip-parada ${pkg.escaneado ? "ok" : ""}">#${pkg.parada}${pkg.escaneado ? " ✓" : ""}</span>`;
             }
         }
 
+        const alertasHtml = alertas.length > 0
+            ? `<div class="alertas-row">${alertas.map(a => `<span class="alerta-pill ${a.tipo}">${a.texto}</span>`).join("")}</div>`
+            : "";
+
+        const avisoMismoApto = mismosApto > 0
+            ? `<div style="font-size:0.82rem; color:#bbf7d0; margin-top:4px;">📌 Hay ${mismosApto + 1} bultos para este mismo ${esc(blocoApto)}</div>`
+            : "";
+
         const bultosHtml = totalBultos > 1
             ? `<div class="info-bultos">
-                    📦 ¡ATENCIÓN! ${escaneadosDir} de ${totalBultos} BULTOS EN ESTA DIRECCIÓN
+                    📦 ${escaneadosDir} de ${totalBultos} BULTOS EN ESTA DIRECCIÓN
+                    ${avisoMismoApto}
                     <div class="bultos-paradas">${chipsHtml}</div>
                </div>`
             : `<div class="info-bultos" style="color:#d1fae5;">📦 1 bulto único en esta dirección</div>`;
+
+        const gpsBtnHtml = (datos.lat !== null && datos.lon !== null)
+            ? `<a class="btn-mini" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${datos.lat},${datos.lon}">📍 Pin</a>`
+            : "";
 
         caja.className = yaEstabaEscaneado ? "ambar" : "verde";
         caja.innerHTML = `
@@ -770,14 +1069,23 @@
                 <div class="zona-badge" style="background:${zona.color};">${zona.texto}</div>
             </div>
             ${yaEstabaEscaneado
-                ? `<div class="estado-tag">⚠️ PAQUETE YA ESCANEADO ANTERIORMENTE</div>`
+                ? `<div class="estado-tag">⚠️ YA ESCANEADO ANTERIORMENTE</div>`
                 : `<div class="estado-tag">✅ REGISTRADO EN CARGA</div>`}
+            ${alertasHtml}
             ${bultosHtml}
             <div class="info-direccion">
-                ${datos.refShopee ? `<strong>[${esc(datos.refShopee)}]</strong> ` : ""}${esc(datos.dirVisible)}
+                ${blocoApto ? `<div style="color:#fde047; font-size:1.05rem; margin-bottom:2px;">📍 ${esc(blocoApto)}</div>` : ""}
+                ${datos.refShopee ? `<span style="opacity:0.8">[${esc(datos.refShopee)}]</span> ` : ""}${esc(datos.dirCompleta)}
             </div>
+            ${datos.bairro ? `<div class="info-bairro">${esc(datos.bairro)}</div>` : ""}
             <div class="info-guia">${esc(codigo)}</div>
-            <button class="btn-desmarcar" onclick="desmarcarPaquete('${esc(codigo)}')">Desmarcar de cargados</button>
+            <div class="quick-actions">
+                <button class="btn-mini" onclick="copiarMensaje(this, '${esc(codigo)}', 'camino')">💬 Camino</button>
+                <button class="btn-mini" onclick="copiarMensaje(this, '${esc(codigo)}', 'puerta')">💬 Puerta</button>
+                <button class="btn-mini" onclick="copiarMensaje(this, '${esc(codigo)}', 'ausente')">💬 Ausente</button>
+                ${gpsBtnHtml}
+                <button class="btn-mini" onclick="desmarcarPaquete('${esc(codigo)}')">Desmarcar</button>
+            </div>
         `;
 
         if (yaEstabaEscaneado) {
@@ -789,6 +1097,50 @@
         } else {
             emitirBeep("ok");
             if (navigator.vibrate) navigator.vibrate(150);
+        }
+    }
+
+    // ---------------- COPIADO RÁPIDO DE MENSAJES (1 TOQUE) ----------------
+    async function copiarMensaje(btn, codigo, tipo) {
+        const datos = mapaRuta.get(codigo);
+        if (!datos) return;
+
+        const grp = mapaGrupos.get(datos.grupoId);
+        const total = grp ? grp.count : 1;
+        const bloco = extraerBlocoApto(datos.dirCompleta);
+        const dirCorta = datos.dirCompleta.split(",").slice(0, 2).join(",");
+        const refLugar = bloco ? `${dirCorta} (${bloco})` : dirCorta;
+        const txtPacote = total > 1 ? `${total} pacotes seus` : "um pacote seu";
+
+        let msg = "";
+        if (tipo === "camino") {
+            msg = `Olá! Sou entregador da Shopee, estou a caminho com ${txtPacote} para ${refLugar}. Vai ter alguém para receber?`;
+        } else if (tipo === "puerta") {
+            msg = `Olá! Estou na frente/portaria com sua entrega da Shopee (${refLugar}). Pode receber agora?`;
+        } else {
+            msg = `Olá! Passei agora no endereço (${refLugar}) com sua entrega da Shopee, mas ninguém atendeu. Tem alguém ou algum vizinho autorizado que possa receber?`;
+        }
+
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(msg);
+            } else {
+                const ta = document.createElement("textarea");
+                ta.value = msg;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            }
+            const textoOriginal = btn.innerText;
+            btn.innerText = "✅ Copiado";
+            btn.classList.add("copiado");
+            setTimeout(() => {
+                btn.innerText = textoOriginal;
+                btn.classList.remove("copiado");
+            }, 1400);
+        } catch (e) {
+            alert("Mensaje listo:\n\n" + msg);
         }
     }
 
@@ -818,11 +1170,9 @@
         const coincidencias = [];
         for (const [codigo, datos] of mapaRuta.entries()) {
             const enCodigo = codigo.includes(q);
-            const enDir = datos.dirVisible.toUpperCase().includes(q);
+            const enDir = datos.dirCompleta.toUpperCase().includes(q);
             const enParada = String(datos.parada) === q;
-            if (enCodigo || enDir || enParada) {
-                coincidencias.push({ codigo, datos });
-            }
+            if (enCodigo || enDir || enParada) coincidencias.push({ codigo, datos });
             if (coincidencias.length >= 6) break;
         }
 
@@ -834,7 +1184,7 @@
         cont.innerHTML = coincidencias.map(({ codigo, datos }) => `
             <div class="busqueda-item">
                 <div>
-                    <strong>#${datos.parada}</strong> ${datos.escaneado ? "✅" : "⏳"} - ${esc(datos.dirVisible.slice(0, 48))}...
+                    <strong>#${datos.parada}</strong> ${datos.escaneado ? "✅" : "⏳"} - ${esc(datos.dirCompleta.slice(0, 50))}
                     <div style="font-size:0.75rem; color:#9ca3af; font-family:monospace;">${esc(codigo)}</div>
                 </div>
                 <button onclick="seleccionarManual('${esc(codigo)}')">Ubicar</button>
@@ -875,13 +1225,13 @@
                 if (tabActual === "faltantes" && item.escaneado) return false;
                 if (tabActual === "cargados" && !item.escaneado) return false;
                 if (tabActual === "multi") {
-                    const info = mapaDirecciones.get(item.dirNorm);
-                    if (!info || info.count <= 1) return false;
+                    const grp = mapaGrupos.get(item.grupoId);
+                    if (!grp || grp.count <= 1) return false;
                 }
                 if (!filtro) return true;
                 return (
                     item.codigo.includes(filtro) ||
-                    item.dirVisible.toUpperCase().includes(filtro) ||
+                    item.dirCompleta.toUpperCase().includes(filtro) ||
                     String(item.parada) === filtro
                 );
             });
@@ -892,13 +1242,13 @@
         }
 
         cont.innerHTML = items.map(item => {
-            const infoDir = mapaDirecciones.get(item.dirNorm);
-            const multiTag = (infoDir && infoDir.count > 1) ? ` • 📦 x${infoDir.count}` : "";
+            const grp = mapaGrupos.get(item.grupoId);
+            const multiTag = (grp && grp.count > 1) ? ` • 📦 x${grp.count}` : "";
             return `
                 <div class="lista-row">
                     <div>
                         <strong>Parada #${item.parada}${multiTag}</strong> ${item.escaneado ? "✅" : ""}
-                        <div>${esc(item.dirVisible)}</div>
+                        <div>${esc(item.dirCompleta)}</div>
                         <small>${esc(item.codigo)}</small>
                     </div>
                     <button class="btn-icon" onclick="${item.escaneado ? `desmarcarPaquete('${esc(item.codigo)}')` : `procesarLectura('${esc(item.codigo)}', true); renderizarListaModal();`}">
@@ -931,7 +1281,6 @@
                 { facingMode: "environment" },
                 {
                     fps: 12,
-                    // Caja cuadrada ideal para leer cualquiera de los 3 QR y también barras horizontales
                     qrbox: (w, h) => {
                         const lado = Math.min(250, Math.floor(Math.min(w, h) * 0.72));
                         return { width: lado, height: lado };

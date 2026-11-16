@@ -1,11 +1,12 @@
-const CACHE_NAME = "escaner-fiorino-v1";
+const CACHE_NAME = "escaner-fiorino-v2";
 const ASSETS = [
     "./",
     "./index.html",
     "./manifest.json",
     "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
+    "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
 ];
 
 self.addEventListener("install", (event) => {
