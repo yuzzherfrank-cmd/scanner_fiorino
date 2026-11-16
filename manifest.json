@@ -1,0 +1,9 @@
+{
+  "name": "Escáner Pro - Carga Fiorino",
+  "short_name": "Escáner Pro",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#101216",
+  "theme_color": "#121212",
+  "orientation": "portrait"
+}
