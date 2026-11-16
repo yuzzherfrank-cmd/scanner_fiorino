@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#121212">
     <title>Escáner Pro - Carga Fiorino</title>
     <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon-192.png">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -57,6 +58,14 @@
         }
         .btn-icon.activo { background: #eab308; color: #000; border-color: #eab308; }
         .btn-icon.peligro { color: #fca5a5; }
+        .btn-exportar {
+            width: 100%;
+            margin-top: 8px;
+            background: #1d4ed8;
+            border-color: #3b82f6;
+            color: #fff;
+            padding: 10px;
+        }
 
         .progreso-box {
             background: var(--card);
@@ -104,7 +113,7 @@
         }
         .scanner-controls button { flex: 1; }
 
-        /* Tarjeta de Resultado (Protagonista) */
+        /* Tarjeta de Resultado */
         #resultado {
             border-radius: 12px;
             padding: 16px 14px;
@@ -208,7 +217,6 @@
             font-family: monospace;
         }
 
-        /* Acciones rápidas en la tarjeta */
         .quick-actions {
             margin-top: 10px;
             padding-top: 8px;
@@ -231,7 +239,6 @@
         }
         .btn-mini.copiado { background: #fef08a; color: #000; border-color: #fef08a; }
 
-        /* Paneles inferiores */
         .panel {
             background: var(--card);
             border: 1px solid var(--border);
@@ -331,7 +338,7 @@
         }
         .tab-btn.activa { background: var(--blue); color: #fff; border-color: var(--blue); }
         .lista-items {
-            max-height: 60vh;
+            max-height: 62vh;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -350,6 +357,57 @@
             gap: 8px;
         }
         .lista-row small { color: var(--muted); display: block; margin-top: 2px; font-family: monospace; }
+
+        /* Acordeón Multibulto */
+        details.multi-grupo {
+            background: var(--card-2);
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            overflow: hidden;
+        }
+        summary.multi-summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            user-select: none;
+        }
+        summary.multi-summary::-webkit-details-marker { display: none; }
+        .multi-titulo { line-height: 1.3; }
+        .multi-titulo small { display: block; color: var(--muted); font-size: 0.76rem; margin-top: 2px; }
+        .multi-badge {
+            background: #374151;
+            color: #fef08a;
+            font-weight: 800;
+            font-size: 0.78rem;
+            padding: 4px 8px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .multi-badge.completo { background: #16a34a; color: #052e16; }
+        .multi-body {
+            border-top: 1px solid var(--border);
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            background: #171b22;
+        }
+        .multi-subrow {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 8px;
+            border-radius: 6px;
+            background: var(--card-2);
+            font-size: 0.81rem;
+        }
+        .multi-subrow small { color: var(--muted); display: block; font-family: monospace; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -398,8 +456,12 @@
             <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
         </div>
         <div class="file-group">
-            <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (Opcional: GPS y notas completas):</label>
+            <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (GPS, notas y limpieza para Routin):</label>
             <input type="file" id="subirExcel" accept=".xlsx,.xls,.csv" onchange="cargarExcel(event)">
+            <button id="btnExportarRoutin" class="btn-icon btn-exportar" style="display:none;" onclick="exportarExcelParaRoutin()">
+                🧹 Descargar Excel limpio para Routin
+            </button>
+            <div id="resumenLimpieza" class="estado-carga" style="color:#93c5fd; display:none;"></div>
         </div>
         <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
         <div style="margin-top:8px; display:flex; justify-content:flex-end;">
@@ -431,6 +493,7 @@
 
     const STORAGE_RUTA = "escaner_fiorino_ruta_v2";
     const STORAGE_EXCEL = "escaner_fiorino_excel_v2";
+    const STORAGE_EXCEL_RAW = "escaner_fiorino_excel_raw_v1";
     const STORAGE_AUDIO = "escaner_audio_modo";
 
     let html5QrCode = null;
@@ -439,7 +502,6 @@
     let scannerBusy = false;
     let linternaActiva = false;
 
-    // Modos de sonido: "voz" | "beep" | "mudo"
     let modoAudio = localStorage.getItem(STORAGE_AUDIO) || "voz";
     let audioCtx = null;
 
@@ -447,14 +509,14 @@
     let ultimoTiempoLeido = 0;
     const COOLDOWN_MS = 2500;
 
-    // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, escaneado }
     let mapaRuta = new Map();
-    // codigoBR -> { address, bairro, lat, lon }
     let mapaExcel = new Map();
-    // grupoId -> { count, paradas: [number], codigos: [string] }
+    let excelFilasOriginales = [];
+    let nombreArchivoExcel = "shopee_para_routin.xlsx";
     let mapaGrupos = new Map();
 
     let tabActual = "faltantes";
+    let gruposAbiertos = new Set();
 
     // ---------------- AUDIO Y VOZ ----------------
     function desbloquearAudio() {
@@ -550,6 +612,14 @@
             .replace(/"/g, "&quot;");
     }
 
+    function sinAcentos(str) {
+        return String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function coordsValidas(lat, lon) {
+        return Number.isFinite(lat) && Number.isFinite(lon) && !(Math.abs(lat) < 0.01 && Math.abs(lon) < 0.01);
+    }
+
     function obtenerZonaFiorino(parada, total) {
         if (total < 4) return { texto: `PARADA #${parada}`, color: "rgba(0,0,0,0.35)" };
         const pct = parada / total;
@@ -578,6 +648,9 @@
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
             mapaExcel.clear();
+            excelFilasOriginales = rows;
+            const baseName = archivo.name.replace(/\.(xlsx|xls|csv)$/i, "");
+            nombreArchivoExcel = `${baseName}_LIMPIO_ROUTIN.xlsx`;
 
             for (const row of rows) {
                 let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || "").trim().toUpperCase();
@@ -596,12 +669,13 @@
 
                 const lat = parseFloat(latRaw);
                 const lon = parseFloat(lonRaw);
+                const gpsOk = coordsValidas(lat, lon);
 
                 mapaExcel.set(tn, {
                     address,
                     bairro,
-                    lat: Number.isFinite(lat) ? lat : null,
-                    lon: Number.isFinite(lon) ? lon : null
+                    lat: gpsOk ? lat : null,
+                    lon: gpsOk ? lon : null
                 });
             }
 
@@ -610,6 +684,7 @@
             }
             guardarEstado();
             actualizarEstadoCargaUI();
+            document.getElementById("resumenLimpieza").style.display = "none";
         } catch (err) {
             console.error(err);
             estadoEl.innerText = "Error al leer Excel: " + err.message;
@@ -617,6 +692,238 @@
         } finally {
             e.target.value = "";
         }
+    }
+
+    // ---------------- LIMPIADOR + COMPLETADOR LÓGICO PARA ROUTIN ----------------
+    const REGEX_PREFIJO = /^(rua|r\.|r|avenida|av\.|av|travessa|tv\.|tv|alameda|al\.|al|rodovia|rod\.|estrada|est\.|pra[çc]a|p[çc]a\.|largo|viela|beco)\s+/i;
+
+    function expandirPrefijo(calle) {
+        return calle
+            .replace(/^r\.?\s+/i, "Rua ")
+            .replace(/^av\.?\s+/i, "Avenida ")
+            .replace(/^tv\.?\s+/i, "Travessa ")
+            .replace(/^al\.?\s+/i, "Alameda ")
+            .replace(/^p[çc]a\.?\s+/i, "Praça ")
+            .replace(/^est\.?\s+/i, "Estrada ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function limpiarCallePreComa(calleRaw, bairroNorm) {
+        let calle = calleRaw
+            .replace(/\([^)]*\)/g, " ") // Quita "(horário comercial)" dentro de la calle
+            .replace(/\s+/g, " ")
+            .trim();
+
+        // Quita ": Residencial Dom Pietro" pegado con ":"
+        if (calle.includes(":")) {
+            calle = calle.split(":")[0].trim();
+        }
+
+        calle = expandirPrefijo(calle);
+
+        // Quitar "-Bairro" pegado al nombre sin romper guiones reales (ej: "Mac-Knight" o "Mogi-Mirim")
+        if (calle.includes("-")) {
+            const idx = calle.lastIndexOf("-");
+            const izq = calle.slice(0, idx).trim();
+            const der = calle.slice(idx + 1).trim();
+            const derNorm = sinAcentos(der).toLowerCase();
+            if (derNorm.length >= 4 && (
+                (bairroNorm && (bairroNorm.includes(derNorm) || derNorm.includes(bairroNorm))) ||
+                /\b(joias|jardim|parque|vila|residencial|condominio)\b/.test(derNorm)
+            )) {
+                calle = izq;
+            }
+        }
+        return calle.trim();
+    }
+
+    function limpiarDireccionIndividual(dirRaw, bairroRaw, cityRaw) {
+        let dir = String(dirRaw || "").replace(/(\d)\.(\d)/g, "$1$2").replace(/\s+/g, " ").trim();
+        const bairroNorm = sinAcentos(bairroRaw).toLowerCase().trim();
+        const cityNorm = sinAcentos(cityRaw).toLowerCase().trim();
+
+        // 1) Formato normal con coma: "Calle, 123..." o "Calle, 201 B, ..."
+        let match = dir.match(/^([^,]+),\s*(\d+(?:\s*[A-Za-z](?=\s*(?:,|$)))?)(?:,(.*))?$/);
+        // 2) Fallback sin coma antes del número: "R Noruega 1260, SP"
+        if (!match) {
+            match = dir.match(/^(.+?)\s+(\d+(?:\s*[A-Za-z](?=\s*(?:,|$)))?)(?:,\s*(.*))?$/);
+        }
+
+        if (!match) {
+            const c = limpiarCallePreComa(dir, bairroNorm);
+            return { calleLimpia: c, tienePrefijo: REGEX_PREFIJO.test(c), num: null, numBase: null, restoLimpio: [] };
+        }
+
+        const calle = limpiarCallePreComa(match[1], bairroNorm);
+        const num = match[2].replace(/\s+/g, " ").trim();
+        const numBase = (num.match(/\d+/) || [num])[0];
+        const restoRaw = match[3] ? match[3].split(",").map(s => s.trim()).filter(Boolean) : [];
+
+        const regexRiesgoPOI = /\b(proximo|proxima|paralela|perto|esquina|ao lado|do lado|sentido|passando|em frente|enfrente|nao jogar|jogar|garagem|quintal|bater|chamar|horario|seg a sex|supermercado|escola|farmacia|padaria|lanchonete|bela horta|pico modas|casa de maria|pavan|cemiterio|vidracaria|trailer|toldo|borracha|toop som|raul livros|azulejo|barbearia|esmalteria|grafica|buffet|emporio|empresa|trabalho|drogal|loterica|contabilidade|agropet|mercearia)\b/i;
+
+        const restoLimpio = [];
+        for (const parte of restoRaw) {
+            // Comprime letras repetidas ("JOGARRRRR" -> "jogar") solo para evaluar riesgo
+            const pNorm = sinAcentos(parte).toLowerCase().replace(/([a-z])\1{2,}/g, "$1").trim();
+            if (!pNorm || pNorm === "n/a" || pNorm === "brasil") continue;
+            if (/^(sao paulo|sp)$/i.test(pNorm)) continue;
+            if (/^\d{5}-?\d{3}$/.test(pNorm)) continue;
+            if (cityNorm && pNorm === cityNorm) continue;
+            if (bairroNorm && pNorm === bairroNorm) continue;
+            if (regexRiesgoPOI.test(pNorm)) continue;
+            restoLimpio.push(parte);
+        }
+
+        return {
+            calleLimpia: calle,
+            tienePrefijo: REGEX_PREFIJO.test(calle),
+            num,
+            numBase,
+            restoLimpio
+        };
+    }
+
+    function exportarExcelParaRoutin() {
+        if (!excelFilasOriginales || excelFilasOriginales.length === 0) return;
+
+        let contLimpiadas = 0;
+        let contPrefijos = 0;
+        let contConsensoGPS = 0;
+        const ejemplosCambio = [];
+
+        const registros = excelFilasOriginales.map((row) => {
+            const copia = { ...row };
+            const colAddr = copia["Destination Address"] !== undefined ? "Destination Address" : (copia["Address"] !== undefined ? "Address" : "Destination Address");
+            const origAddr = String(copia[colAddr] || "").trim();
+            const bairro = String(copia["Bairro"] || copia["Neighborhood"] || "").trim();
+            const city = String(copia["City"] || "").trim();
+            const lat = parseFloat(String(copia["Latitude"] || "").replace(",", "."));
+            const lon = parseFloat(String(copia["Longitude"] || "").replace(",", "."));
+            const gpsOk = coordsValidas(lat, lon);
+
+            const info = limpiarDireccionIndividual(origAddr, bairro, city);
+            const sinPref = info.calleLimpia.replace(REGEX_PREFIJO, "").trim();
+            const prefMatch = info.calleLimpia.match(REGEX_PREFIJO);
+
+            return {
+                copia,
+                colAddr,
+                origAddr,
+                info,
+                prefijo: prefMatch ? prefMatch[0].trim() : "",
+                calleSinPrefNorm: sinAcentos(sinPref).toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim(),
+                lat: gpsOk ? lat : null,
+                lon: gpsOk ? lon : null
+            };
+        });
+
+        // Paso 2A: Completar prefijos faltantes ("Humberto De Lucca" -> "Rua Humberto De Lucca")
+        const mapaPrefijos = new Map();
+        for (const r of registros) {
+            if (r.prefijo && r.calleSinPrefNorm && !mapaPrefijos.has(r.calleSinPrefNorm)) {
+                mapaPrefijos.set(r.calleSinPrefNorm, r.prefijo);
+            }
+        }
+        for (const r of registros) {
+            if (!r.info.tienePrefijo && r.info.numBase && mapaPrefijos.has(r.calleSinPrefNorm)) {
+                const pref = mapaPrefijos.get(r.calleSinPrefNorm);
+                r.info.calleLimpia = `${pref.charAt(0).toUpperCase() + pref.slice(1).toLowerCase()} ${r.info.calleLimpia}`;
+                r.info.tienePrefijo = true;
+                contPrefijos++;
+            }
+        }
+
+        // Paso 2B: Consenso por GPS (<= 40m) o similitud fuerte de calle + mismo número base
+        const n = registros.length;
+        const padre = Array.from({ length: n }, (_, i) => i);
+        const find = (x) => (padre[x] === x ? x : (padre[x] = find(padre[x])));
+        const union = (a, b) => {
+            const ra = find(a), rb = find(b);
+            if (ra !== rb) padre[rb] = ra;
+        };
+
+        for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+                const A = registros[i], B = registros[j];
+                if (!A.info.numBase || A.info.numBase !== B.info.numBase) continue;
+                const dist = distanciaMetros(A.lat, A.lon, B.lat, B.lon);
+                const sim = similitudBigrams(A.calleSinPrefNorm, B.calleSinPrefNorm);
+                if (dist <= 40 || sim >= 0.85) union(i, j);
+            }
+        }
+
+        const clusters = new Map();
+        for (let i = 0; i < n; i++) {
+            const root = find(i);
+            if (!clusters.has(root)) clusters.set(root, []);
+            clusters.get(root).push(registros[i]);
+        }
+
+        for (const grupo of clusters.values()) {
+            if (grupo.length < 2) continue;
+            const conteo = new Map();
+            for (const r of grupo) {
+                const key = sinAcentos(r.info.calleLimpia).toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+                if (!conteo.has(key)) conteo.set(key, { count: 0, mejorTexto: r.info.calleLimpia });
+                const entry = conteo.get(key);
+                entry.count += 1;
+                // Preferir versión limpia sin "-" ni typo "schimidt" ni texto largo de condominio pegado
+                if (!/schimidt/i.test(r.info.calleLimpia) && r.info.calleLimpia.length <= entry.mejorTexto.length + 12) {
+                    if (r.info.calleLimpia.length < entry.mejorTexto.length && /bloco|cond|treviso|nature/i.test(entry.mejorTexto)) {
+                        entry.mejorTexto = r.info.calleLimpia;
+                    }
+                }
+            }
+            if (conteo.size <= 1) continue;
+
+            let ganadora = null;
+            for (const [key, data] of conteo.entries()) {
+                if (!ganadora || data.count > ganadora.count ||
+                    (data.count === ganadora.count && data.mejorTexto.length < ganadora.mejorTexto.length && !/\bum\b/i.test(data.mejorTexto))) {
+                    ganadora = { key, ...data };
+                }
+            }
+
+            for (const r of grupo) {
+                const key = sinAcentos(r.info.calleLimpia).toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+                if (key !== ganadora.key && (ganadora.count >= 2 || /schimidt|bloco|cond/i.test(r.info.calleLimpia))) {
+                    const antes = r.info.calleLimpia;
+                    r.info.calleLimpia = ganadora.mejorTexto.replace(/schimidt/gi, "Schmidt");
+                    contConsensoGPS++;
+                    if (ejemplosCambio.length < 3) {
+                        ejemplosCambio.push(`"${antes}, ${r.info.num}" → "${r.info.calleLimpia}, ${r.info.num}"`);
+                    }
+                }
+            }
+        }
+
+        const filasSalida = registros.map((r) => {
+            const nuevaDir = r.info.num
+                ? (r.info.restoLimpio.length > 0
+                    ? `${r.info.calleLimpia}, ${r.info.num}, ${r.info.restoLimpio.join(", ")}`
+                    : `${r.info.calleLimpia}, ${r.info.num}`)
+                : r.info.calleLimpia;
+
+            if (nuevaDir !== r.origAddr) contLimpiadas++;
+            r.copia[r.colAddr] = nuevaDir;
+
+            if (r.copia["Zipcode/Postal code"] !== undefined) {
+                const cep = String(r.copia["Zipcode/Postal code"]).replace(/\D/g, "");
+                if (cep.length === 8) r.copia["Zipcode/Postal code"] = `${cep.slice(0, 5)}-${cep.slice(5)}`;
+            }
+            return r.copia;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(filasSalida);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Route");
+        XLSX.writeFile(wb, nombreArchivoExcel);
+
+        const resEl = document.getElementById("resumenLimpieza");
+        resEl.style.display = "block";
+        resEl.innerHTML = `🧹 <strong>Archivo descargado:</strong> ${contLimpiadas} direcciones depuradas • ${contPrefijos} prefijos completados • ${contConsensoGPS} calles corregidas por consenso.` +
+            (ejemplosCambio.length > 0 ? `<br><span style="color:#bfdbfe;">Ej: ${esc(ejemplosCambio.join(" | "))}</span>` : "");
     }
 
     // ---------------- CARGA DE PDF ROUTIN ----------------
@@ -682,9 +989,7 @@
             const matchBR = linea.match(/\b(BR[0-9A-Z]{13})\b/i);
             if (matchBR) {
                 const codigoBR = matchBR[1].toUpperCase();
-                const textoParada = bufferTexto.join(" ")
-                    .replace(/(\s+-\s*)+$/g, "")
-                    .trim();
+                const textoParada = bufferTexto.join(" ").replace(/(\s+-\s*)+$/g, "").trim();
 
                 const matchNum = textoParada.match(/^(\d{1,3})\s+(.*)$/);
                 const numParada = matchNum ? Number(matchNum[1]) : (mapaRuta.size + 1);
@@ -725,30 +1030,22 @@
 
     // ---------------- ALGORITMO "SENTIDO COMÚN" (TEXTO + GPS + NÚMERO) ----------------
     function parsearDireccionInteligente(texto) {
-        let limpio = String(texto || "")
-            .replace(/(\d)\.(\d)/g, "$1$2")
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-            .toLowerCase();
-
-        limpio = limpio
-            .replace(/^(rua|r\.|r|avenida|av\.|av|travessa|tv\.|alameda|al\.|rodovia|rod\.|estrada|est\.|praca|pca\.|largo|viela|beco)\s+/i, "")
-            .trim();
+        let limpio = sinAcentos(String(texto || "").replace(/(\d)\.(\d)/g, "$1$2")).toLowerCase();
+        limpio = limpio.replace(/\([^)]*\)/g, " ").replace(REGEX_PREFIJO, "").trim();
 
         let calle = "";
         let num = null;
-        const mComa = limpio.match(/^([^,]+),\s*(\d+)\b/);
-        if (mComa) {
-            calle = mComa[1];
-            num = mComa[2];
+        let m = limpio.match(/^([^,]+),\s*(\d+)\b/);
+        if (!m) m = limpio.match(/^(.+?)\s+(\d+)(?:[A-Za-z]?)\s*(?:,|$)/);
+
+        if (m) {
+            calle = m[1];
+            num = m[2];
         } else {
-            const mEsp = limpio.match(/^(.+?)\s+(\d+)\b/);
-            if (mEsp) {
-                calle = mEsp[1];
-                num = mEsp[2];
-            } else {
-                calle = limpio.split(",")[0];
-            }
+            calle = limpio.split(",")[0];
         }
+
+        if (calle.includes(":")) calle = calle.split(":")[0];
 
         calle = calle
             .replace(/schimidt/g, "schmidt")
@@ -756,7 +1053,7 @@
             .replace(/\s+/g, " ")
             .trim();
 
-        const rawAntesComa = limpio.split(",")[0];
+        const rawAntesComa = limpio.split(",")[0].split(":")[0];
         const callePrincipal = rawAntesComa.split("-")[0]
             .replace(/schimidt/g, "schmidt")
             .replace(/[^a-z0-9\s]/g, " ")
@@ -765,7 +1062,6 @@
 
         return {
             calle: callePrincipal || calle,
-            calleFull: calle,
             num
         };
     }
@@ -794,7 +1090,7 @@
     }
 
     function distanciaMetros(lat1, lon1, lat2, lon2) {
-        if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
+        if (!coordsValidas(lat1, lon1) || !coordsValidas(lat2, lon2)) return Infinity;
         const R = 6371000;
         const toRad = (g) => g * Math.PI / 180;
         const dLat = toRad(lat2 - lat1);
@@ -841,13 +1137,9 @@
                 let sonMismoLugar = false;
 
                 if (numA !== null && numA === numB) {
-                    if (sim >= 0.72 || dist <= 45) {
-                        sonMismoLugar = true;
-                    }
+                    if (sim >= 0.72 || dist <= 45) sonMismoLugar = true;
                 } else if (numA === null && numB === null) {
-                    if (sim >= 0.85 || dist <= 18) {
-                        sonMismoLugar = true;
-                    }
+                    if (sim >= 0.85 || dist <= 18) sonMismoLugar = true;
                 } else {
                     if (sim >= 0.88 && dist <= 30) sonMismoLugar = true;
                     else if (dist <= 12) sonMismoLugar = true;
@@ -878,9 +1170,10 @@
     }
 
     // ---------------- EXTRACCIÓN DE COMPLEMENTOS Y ALERTAS ----------------
-    function extraerBlocoApto(texto) {
-        const mBl = texto.match(/\b(?:bloco|bl\.?)\s*([0-9A-Za-z]+)/i);
-        const mAp = texto.match(/\b(?:apartamento|apto\.?|apt\.?|ap\.?)\s*([0-9A-Za-z]+)/i);
+    function extraerBlocoApto(texto, bairro = "") {
+        const combinado = `${texto || ""} ${bairro || ""}`;
+        const mBl = combinado.match(/\b(?:bloco|blc\.?|bl\.?|torre)\s*([0-9A-Za-z]+)/i);
+        const mAp = combinado.match(/\b(?:apartamento|apart\.?|apto\.?|apt\.?|ap[eê]?\.?)\s*([0-9A-Za-z]+)/i);
         const partes = [];
         if (mBl) partes.push(`Bloco ${mBl[1].toUpperCase()}`);
         if (mAp) partes.push(`Apto ${mAp[1].toUpperCase()}`);
@@ -889,14 +1182,14 @@
 
     function detectarAlertas(texto) {
         const alertas = [];
-        const t = texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda)\b/.test(t)) {
+        const t = sinAcentos(texto).toLowerCase().replace(/([a-z])\1{2,}/g, "$1");
+        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda|barbearia|trabalho|galeria|grafica|emporio|esmalteria|modas|empresa|posto|drogal|loterica|contabilidade|vidracaria|buffet|toop som|borracha|mercearia)\b/.test(t)) {
             alertas.push({ texto: "🏢 COMERCIO / HORARIO", tipo: "" });
         }
-        if (/\b(condominio|cond\.|conde\.|bloco|bl\s*\d|apto|apartamento|portaria)\b/.test(t)) {
+        if (/\b(condominio|cond\.|conde\.|bloco|blc|bl\s*\d|torre|apto|apart|apartamento|portaria|interfone)\b/.test(t)) {
             alertas.push({ texto: "🏘️ CONDOMINIO", tipo: "" });
         }
-        if (/\b(nao jogar|não jogar|quintal|portao|fundo|frente|placa|entregar|vizinho)\b/.test(t)) {
+        if (/\b(nao jogar|jogar|garagem|quintal|portao|fundo|frente|placa|entregar|vizinho|bater|chamar|toldo)\b/.test(t)) {
             alertas.push({ texto: "⚠️ LEER NOTA", tipo: "nota" });
         }
         return alertas;
@@ -907,6 +1200,7 @@
         try {
             localStorage.setItem(STORAGE_RUTA, JSON.stringify(Array.from(mapaRuta.entries())));
             localStorage.setItem(STORAGE_EXCEL, JSON.stringify(Array.from(mapaExcel.entries())));
+            localStorage.setItem(STORAGE_EXCEL_RAW, JSON.stringify(excelFilasOriginales));
         } catch (e) {
             console.warn("No se pudo guardar en localStorage:", e);
         }
@@ -917,6 +1211,9 @@
             const rawEx = localStorage.getItem(STORAGE_EXCEL);
             if (rawEx) mapaExcel = new Map(JSON.parse(rawEx));
 
+            const rawFilas = localStorage.getItem(STORAGE_EXCEL_RAW);
+            if (rawFilas) excelFilasOriginales = JSON.parse(rawFilas);
+
             const rawRuta = localStorage.getItem(STORAGE_RUTA);
             if (rawRuta) {
                 const entries = JSON.parse(rawRuta);
@@ -925,8 +1222,10 @@
                     enriquecerYAgrupar();
                     actualizarUIProgreso();
                     actualizarEstadoCargaUI(true);
+                    return;
                 }
-            } else if (mapaExcel.size > 0) {
+            }
+            if (mapaExcel.size > 0 || excelFilasOriginales.length > 0) {
                 actualizarEstadoCargaUI(true);
             }
         } catch (e) {
@@ -936,6 +1235,9 @@
 
     function actualizarEstadoCargaUI(restaurado = false) {
         const estadoEl = document.getElementById("estadoCarga");
+        const btnExp = document.getElementById("btnExportarRoutin");
+        btnExp.style.display = excelFilasOriginales.length > 0 ? "block" : "none";
+
         if (mapaRuta.size === 0 && mapaExcel.size === 0) {
             estadoEl.innerText = "Esperando archivos...";
             estadoEl.style.color = "#9ca3af";
@@ -959,15 +1261,19 @@
     }
 
     function limpiarRuta() {
-        if (mapaRuta.size === 0 && mapaExcel.size === 0) return;
+        if (mapaRuta.size === 0 && mapaExcel.size === 0 && excelFilasOriginales.length === 0) return;
         if (!confirm("¿Seguro que quieres borrar la ruta, el Excel y todo el progreso?")) return;
         mapaRuta.clear();
         mapaExcel.clear();
         mapaGrupos.clear();
+        excelFilasOriginales = [];
+        gruposAbiertos.clear();
         localStorage.removeItem(STORAGE_RUTA);
         localStorage.removeItem(STORAGE_EXCEL);
+        localStorage.removeItem(STORAGE_EXCEL_RAW);
         actualizarUIProgreso();
         actualizarEstadoCargaUI();
+        document.getElementById("resumenLimpieza").style.display = "none";
         const caja = document.getElementById("resultado");
         caja.className = "";
         caja.innerHTML = `<div style="font-size:1.1rem; font-weight:700;">Esperando escaneo...</div>`;
@@ -1043,8 +1349,8 @@
         const grp = mapaGrupos.get(datos.grupoId);
         const totalBultos = grp ? grp.count : 1;
         const zona = obtenerZonaFiorino(datos.parada, mapaRuta.size);
-        const blocoApto = extraerBlocoApto(datos.dirCompleta);
-        const alertas = detectarAlertas(datos.dirCompleta);
+        const blocoApto = extraerBlocoApto(datos.dirCompleta, datos.bairro);
+        const alertas = detectarAlertas(`${datos.dirCompleta} ${datos.bairro}`);
 
         let escaneadosDir = 0;
         let mismosApto = 0;
@@ -1055,7 +1361,7 @@
                 const pkg = mapaRuta.get(codGrp);
                 if (!pkg) continue;
                 if (pkg.escaneado) escaneadosDir++;
-                if (blocoApto && codGrp !== codigo && extraerBlocoApto(pkg.dirCompleta) === blocoApto) {
+                if (blocoApto && codGrp !== codigo && extraerBlocoApto(pkg.dirCompleta, pkg.bairro) === blocoApto) {
                     mismosApto++;
                 }
             }
@@ -1084,7 +1390,7 @@
                </div>`
             : `<div class="info-bultos" style="color:#d1fae5;">📦 1 bulto único en esta dirección</div>`;
 
-        const gpsBtnHtml = (datos.lat !== null && datos.lon !== null)
+        const gpsBtnHtml = coordsValidas(datos.lat, datos.lon)
             ? `<a class="btn-mini" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${datos.lat},${datos.lon}">📍 Pin</a>`
             : "";
 
@@ -1219,7 +1525,7 @@
         procesarLectura(codigo, true);
     }
 
-    // ---------------- MODAL LISTA DE CONTROL ----------------
+    // ---------------- MODAL LISTA DE CONTROL (ACORDEÓN MULTIBULTO) ----------------
     function abrirModal() {
         document.getElementById("modalLista").classList.add("abierto");
         renderizarListaModal();
@@ -1234,10 +1540,81 @@
         document.getElementById("tabMulti").classList.toggle("activa", tab === "multi");
         renderizarListaModal();
     }
+    function toggleGrupoModal(grupoId, estaAbierto) {
+        if (estaAbierto) gruposAbiertos.add(grupoId);
+        else gruposAbiertos.delete(grupoId);
+    }
 
     function renderizarListaModal() {
         const cont = document.getElementById("listaModalContenido");
         const filtro = document.getElementById("filtroModal").value.trim().toUpperCase();
+
+        if (tabActual === "multi") {
+            const grupos = [];
+            for (const [gId, grp] of mapaGrupos.entries()) {
+                if (grp.count <= 1) continue;
+                const paquetes = grp.codigos
+                    .map(c => ({ codigo: c, ...mapaRuta.get(c) }))
+                    .filter(Boolean)
+                    .sort((a, b) => a.parada - b.parada);
+
+                if (filtro) {
+                    const coincideGrupo = paquetes.some(p =>
+                        p.codigo.includes(filtro) ||
+                        p.dirCompleta.toUpperCase().includes(filtro) ||
+                        String(p.parada) === filtro
+                    );
+                    if (!coincideGrupo) continue;
+                }
+                grupos.push({ gId, grp, paquetes });
+            }
+
+            grupos.sort((a, b) => a.paquetes[0].parada - b.paquetes[0].parada);
+
+            if (grupos.length === 0) {
+                cont.innerHTML = `<div style="text-align:center; color:#9ca3af; padding:20px;">No hay paradas multibulto.</div>`;
+                return;
+            }
+
+            cont.innerHTML = grupos.map(({ gId, grp, paquetes }) => {
+                const cargados = paquetes.filter(p => p.escaneado).length;
+                const completo = cargados === grp.count;
+                const paradasTxt = paquetes.map(p => `#${p.parada}`).join(", ");
+                const baseDir = paquetes[0].dirCompleta.split(",").slice(0, 2).join(",");
+                const abiertoAttr = (gruposAbiertos.has(gId) || filtro) ? "open" : "";
+
+                const subFilasHtml = paquetes.map(p => {
+                    const bl = extraerBlocoApto(p.dirCompleta, p.bairro);
+                    return `
+                        <div class="multi-subrow">
+                            <div>
+                                <strong>#${p.parada}</strong> ${p.escaneado ? "✅" : "⏳"}
+                                ${bl ? `<span style="color:#fde047; font-weight:700;">• ${esc(bl)}</span>` : ""}
+                                <div>${esc(p.dirCompleta)}</div>
+                                <small>${esc(p.codigo)}</small>
+                            </div>
+                            <button class="btn-icon" onclick="${p.escaneado ? `desmarcarPaquete('${esc(p.codigo)}')` : `procesarLectura('${esc(p.codigo)}', true); renderizarListaModal();`}">
+                                ${p.escaneado ? "Quitar" : "Cargar"}
+                            </button>
+                        </div>
+                    `;
+                }).join("");
+
+                return `
+                    <details class="multi-grupo" ${abiertoAttr} ontoggle="toggleGrupoModal('${gId}', this.open)">
+                        <summary class="multi-summary">
+                            <div class="multi-titulo">
+                                <strong>📦 ${esc(baseDir)}</strong>
+                                <small>Paradas: ${esc(paradasTxt)}</small>
+                            </div>
+                            <span class="multi-badge ${completo ? "completo" : ""}">${cargados} / ${grp.count}${completo ? " ✓" : ""}</span>
+                        </summary>
+                        <div class="multi-body">${subFilasHtml}</div>
+                    </details>
+                `;
+            }).join("");
+            return;
+        }
 
         const items = Array.from(mapaRuta.entries())
             .map(([codigo, datos]) => ({ codigo, ...datos }))
@@ -1245,10 +1622,6 @@
             .filter(item => {
                 if (tabActual === "faltantes" && item.escaneado) return false;
                 if (tabActual === "cargados" && !item.escaneado) return false;
-                if (tabActual === "multi") {
-                    const grp = mapaGrupos.get(item.grupoId);
-                    if (!grp || grp.count <= 1) return false;
-                }
                 if (!filtro) return true;
                 return (
                     item.codigo.includes(filtro) ||
