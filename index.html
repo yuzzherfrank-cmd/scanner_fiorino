@@ -18,6 +18,7 @@
             --muted: #9ca3af;
             --green: #15803d;
             --amber: #b45309;
+            --purple: #6d28d9;
             --red: #b91c1c;
             --blue: #2563eb;
             --border: #303746;
@@ -43,7 +44,7 @@
             align-items: center;
             margin-bottom: 10px;
         }
-        .header h1 { font-size: 1.15rem; margin: 0; font-weight: 700; }
+        .header h1 { font-size: 1.12rem; margin: 0; font-weight: 700; }
         .header-actions { display: flex; gap: 6px; }
 
         .btn-icon {
@@ -52,7 +53,7 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 7px 10px;
-            font-size: 0.84rem;
+            font-size: 0.83rem;
             font-weight: 600;
             cursor: pointer;
             flex-shrink: 0;
@@ -60,38 +61,23 @@
         .btn-icon.activo { background: #eab308; color: #000; border-color: #eab308; }
         .btn-icon.peligro { color: #fca5a5; }
 
-        .btn-export {
-            width: 100%;
-            margin-top: 8px;
-            background: #1d4ed8;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            padding: 10px;
-            font-size: 0.88rem;
-            font-weight: 700;
-            cursor: pointer;
-            display: none;
-        }
-        .btn-export.visible { display: block; }
-
         .progreso-box {
             background: var(--card);
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 10px 12px;
+            padding: 9px 12px;
             margin-bottom: 10px;
         }
         .progreso-top {
             display: flex;
             justify-content: space-between;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             font-weight: 600;
             margin-bottom: 6px;
         }
         .barra-bg {
             width: 100%;
-            height: 10px;
+            height: 9px;
             background: #2d3340;
             border-radius: 999px;
             overflow: hidden;
@@ -103,16 +89,46 @@
             transition: width 0.25s ease;
         }
 
+        /* Selector de Modo de Escaneo */
+        .modo-switch {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .modo-btn {
+            flex: 1;
+            padding: 9px 8px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--muted);
+            font-size: 0.84rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .modo-btn.activo-secuencia {
+            background: #1d4ed8;
+            color: #fff;
+            border-color: #3b82f6;
+        }
+        .modo-btn.activo-atras {
+            background: #7c3aed;
+            color: #fff;
+            border-color: #a78bfa;
+        }
+
         /* Escáner */
         .scanner-wrap {
             position: relative;
             background: #000;
             border-radius: 12px;
             overflow: hidden;
-            border: 1px solid var(--border);
+            border: 2px solid var(--border);
             margin-bottom: 10px;
+            transition: border-color 0.2s ease;
         }
-        #reader { width: 100%; min-height: 220px; }
+        .scanner-wrap.modo-atras-borde { border-color: #a78bfa; }
+        #reader { width: 100%; min-height: 215px; }
         .scanner-controls {
             display: flex;
             gap: 8px;
@@ -122,10 +138,10 @@
         }
         .scanner-controls button { flex: 1; }
 
-        /* Tarjeta de Resultado (Protagonista) */
+        /* Tarjeta de Resultado */
         #resultado {
             border-radius: 12px;
-            padding: 16px 14px;
+            padding: 15px 14px;
             margin-bottom: 12px;
             background: var(--card);
             border: 1px solid var(--border);
@@ -134,18 +150,19 @@
         }
         #resultado.verde { background: var(--green); border-color: #22c55e; }
         #resultado.ambar { background: var(--amber); border-color: #f59e0b; }
+        #resultado.morado { background: var(--purple); border-color: #c4b5fd; }
         #resultado.rojo { background: var(--red); border-color: #ef4444; }
 
         .res-top {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }
-        .parada-num { font-size: 2.05rem; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1; }
+        .parada-num { font-size: 2rem; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1; }
         .zona-badge {
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 800;
             padding: 5px 10px;
             border-radius: 999px;
@@ -161,6 +178,17 @@
             padding: 3px 9px;
             border-radius: 6px;
             background: rgba(0, 0, 0, 0.28);
+        }
+        .badge-atras-grande {
+            display: block;
+            margin-top: 8px;
+            padding: 7px 10px;
+            border-radius: 8px;
+            background: #f97316;
+            color: #fff;
+            font-weight: 900;
+            font-size: 0.95rem;
+            border: 1px solid #fed7aa;
         }
         .alertas-row {
             display: flex;
@@ -178,13 +206,14 @@
             color: #422006;
         }
         .alerta-pill.nota { background: #fed7aa; color: #431407; }
+        .alerta-pill.pin { background: #fecaca; color: #7f1d1d; }
 
         .info-bultos {
             margin-top: 10px;
             padding: 8px 10px;
             border-radius: 8px;
             background: rgba(0, 0, 0, 0.28);
-            font-size: 0.98rem;
+            font-size: 0.96rem;
             font-weight: 700;
             color: #fef08a;
         }
@@ -209,7 +238,7 @@
         }
         .info-direccion {
             margin-top: 10px;
-            font-size: 0.96rem;
+            font-size: 0.95rem;
             line-height: 1.35;
             font-weight: 600;
             color: #fff;
@@ -247,6 +276,7 @@
             text-decoration: none;
         }
         .btn-mini.copiado { background: #fef08a; color: #000; border-color: #fef08a; }
+        .btn-mini.atras-on { background: #f97316; border-color: #fed7aa; }
 
         /* Paneles inferiores */
         .panel {
@@ -256,7 +286,7 @@
             padding: 12px;
             margin-bottom: 10px;
         }
-        .panel label {
+        .panel label.titulo {
             display: block;
             font-size: 0.82rem;
             font-weight: 700;
@@ -275,6 +305,41 @@
             padding: 9px 10px;
             font-size: 0.92rem;
         }
+        .export-box {
+            display: none;
+            margin-top: 8px;
+            padding: 10px;
+            border-radius: 8px;
+            background: var(--card-2);
+            border: 1px solid var(--border);
+        }
+        .export-box.visible { display: block; }
+        .export-radios {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 0.83rem;
+        }
+        .export-radios label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+        }
+        .btn-export {
+            width: 100%;
+            background: #1d4ed8;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-export:disabled { opacity: 0.6; cursor: wait; }
+
         .busqueda-resultados {
             margin-top: 8px;
             display: flex;
@@ -306,10 +371,22 @@
             margin-top: 8px;
             font-size: 0.83rem;
             color: var(--muted);
+            line-height: 1.4;
+        }
+        .alerta-omision {
+            display: none;
+            margin-top: 8px;
+            padding: 9px 10px;
+            border-radius: 8px;
+            background: rgba(185, 28, 28, 0.25);
+            border: 1px solid #ef4444;
+            color: #fecaca;
+            font-size: 0.81rem;
             line-height: 1.35;
         }
+        .alerta-omision.visible { display: block; }
 
-        /* Modal Lista de Control (scroll táctil robusto en Android) */
+        /* Modal Lista de Control (scroll táctil perfecto en Android) */
         .modal-backdrop {
             display: none;
             position: fixed;
@@ -345,7 +422,7 @@
         }
         .tabs {
             display: flex;
-            gap: 6px;
+            gap: 4px;
             margin-bottom: 10px;
             flex-shrink: 0;
         }
@@ -355,8 +432,8 @@
             color: var(--muted);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 8px 4px;
-            font-size: 0.78rem;
+            padding: 8px 3px;
+            font-size: 0.72rem;
             font-weight: 700;
             cursor: pointer;
         }
@@ -393,7 +470,6 @@
         }
         .lista-row small { color: var(--muted); display: block; margin-top: 3px; font-family: monospace; }
 
-        /* Acordeón Multibulto */
         .multi-group {
             background: var(--card-2);
             border: 1px solid var(--border);
@@ -455,7 +531,16 @@
         </div>
     </div>
 
-    <div class="scanner-wrap">
+    <div class="modo-switch">
+        <button id="btnModoSecuencia" class="modo-btn activo-secuencia" onclick="cambiarModoEscaneo('secuencia')">
+            🔍 Secuencia
+        </button>
+        <button id="btnModoAtras" class="modo-btn" onclick="cambiarModoEscaneo('atras')">
+            📦 Va Atrás (<span id="countAtrasBtn">0</span>)
+        </button>
+    </div>
+
+    <div id="scannerWrap" class="scanner-wrap">
         <div id="reader"></div>
         <div class="scanner-controls">
             <button id="btnLinterna" class="btn-icon" onclick="toggleLinterna()">🔦 Linterna</button>
@@ -469,24 +554,39 @@
     </div>
 
     <div class="panel">
-        <label for="busquedaManual">Búsqueda rápida (últimos dígitos, calle, barrio o bloque):</label>
+        <label class="titulo" for="busquedaManual">Búsqueda rápida (últimos dígitos, calle, barrio o bloque):</label>
         <input type="text" id="busquedaManual" placeholder="Ej: 188X, Rubi o 221" oninput="buscarManual(this.value)">
         <div id="busquedaResultados" class="busqueda-resultados"></div>
     </div>
 
     <div class="panel">
         <div class="file-group">
-            <label for="subirPdf">1. PDF de Routin (Orden de paradas):</label>
+            <label class="titulo" for="subirPdf">1. PDF de Routin (Orden de paradas):</label>
             <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
         </div>
         <div class="file-group">
-            <label for="subirExcel">2. Excel de Shopee .xlsx / .csv (GPS, notas y limpiar para Routin):</label>
+            <label class="titulo" for="subirExcel">2. Excel de Shopee .xlsx / .csv (GPS, notas y limpiar para Routin):</label>
             <input type="file" id="subirExcel" onchange="cargarExcel(event)">
-            <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">⬇️ Descargar Excel limpio para Routin</button>
+            <div id="exportBox" class="export-box">
+                <div class="export-radios">
+                    <label>
+                        <input type="radio" name="metodoExport" value="clasico" checked>
+                        <span><strong>Método Clásico:</strong> 1 parada por paquete</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="metodoExport" value="agrupado">
+                        <span><strong>Método Agrupado:</strong> 1 parada por dirección en Routin</span>
+                    </label>
+                </div>
+                <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">
+                    ⬇️ Descargar Excel limpio para Routin
+                </button>
+            </div>
         </div>
         <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
-        <div style="margin-top:8px; display:flex; justify-content:flex-end;">
-            <button class="btn-icon peligro" onclick="limpiarRuta()">🗑️ Limpiar ruta guardada</button>
+        <div id="alertaOmision" class="alerta-omision"></div>
+        <div style="margin-top:10px; display:flex; justify-content:flex-end;">
+            <button class="btn-icon peligro" onclick="limpiarTodo()">🗑️ Nuevo día (Limpiar todo)</button>
         </div>
     </div>
 
@@ -500,9 +600,10 @@
             <button class="btn-icon" onclick="cerrarModal()">✖ Cerrar</button>
         </div>
         <div class="tabs">
-            <button class="tab-btn activa" id="tabFaltantes" onclick="cambiarTab('faltantes')">Faltantes</button>
-            <button class="tab-btn" id="tabCargados" onclick="cambiarTab('cargados')">Cargados</button>
-            <button class="tab-btn" id="tabMulti" onclick="cambiarTab('multi')">Multibulto</button>
+            <button class="tab-btn activa" id="tabFaltantes" onclick="cambiarTab('faltantes')">Faltan</button>
+            <button class="tab-btn" id="tabCargados" onclick="cambiarTab('cargados')">Listos</button>
+            <button class="tab-btn" id="tabMulti" onclick="cambiarTab('multi')">Multi</button>
+            <button class="tab-btn" id="tabAtras" onclick="cambiarTab('atras')">Atrás</button>
         </div>
         <input type="text" id="filtroModal" placeholder="Filtrar por parada, calle, bloque o BR..." oninput="renderizarListaModal()">
         <div id="listaModalContenido" class="lista-items"></div>
@@ -512,9 +613,11 @@
 <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // ---------------- ESTADO GLOBAL ----------------
-    const STORAGE_RUTA = "escaner_fiorino_ruta_v2";
-    const STORAGE_EXCEL = "escaner_fiorino_excel_v2";
+    // ---------------- ESTADO GLOBAL PERSISTENTE ----------------
+    const STORAGE_PDF = "escaner_fiorino_pdf_v3";
+    const STORAGE_EXCEL = "escaner_fiorino_excel_v3";
+    const STORAGE_SCAN = "escaner_fiorino_scan_v3";
+    const STORAGE_ATRAS = "escaner_fiorino_atras_v3";
     const COOLDOWN_MS = 2500;
 
     let html5QrCode = null;
@@ -523,19 +626,31 @@
     let scannerBusy = false;
     let linternaActiva = false;
 
-    // "voz" (pitido + voz) | "pitido" (solo pitido) | "mudo"
+    // "voz" | "pitido" | "mudo"
     let modoAudio = "voz";
     let audioCtx = null;
+
+    // "secuencia" | "atras"
+    let modoEscaneo = "secuencia";
 
     let ultimoCodigoLeido = "";
     let ultimoTiempoLeido = 0;
 
-    // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, escaneado }
-    let mapaRuta = new Map();
-    // codigoBR -> { seq, stop, address, bairro, city, zip, lat, lon }
+    // Fuentes de datos separadas (permite subir PDF y Excel en cualquier orden)
+    // codigoBR -> { parada, refShopee, dirPDF, esAgrupado }
+    let mapaPdfBase = new Map();
+    // codigoBR -> { seq, stop, address, bairro, city, zip, lat, lon, rawLat, rawLon, esPinSospechoso, pinCorregido }
     let mapaExcel = new Map();
+    // Estados independientes del usuario
+    let setEscaneados = new Set();
+    let setAtras = new Set();
+
+    // Ruta activa combinada (construida por reconstruirRutaActiva)
+    // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, esPinSospechoso }
+    let mapaRuta = new Map();
     // grupoId -> { count, paradas: [number], codigos: [string] }
     let mapaGrupos = new Map();
+    let omitidosEnPdf = [];
 
     let tabActual = "faltantes";
 
@@ -598,6 +713,7 @@
 
         if (tipo === "ok") tocar(920, 0.12);
         else if (tipo === "multi") { tocar(900, 0.1, 0); tocar(1240, 0.15, 0.13); }
+        else if (tipo === "atras") { tocar(740, 0.09, 0, "triangle"); tocar(980, 0.14, 0.11, "triangle"); }
         else if (tipo === "duplicado") { tocar(520, 0.1, 0, "triangle"); tocar(420, 0.12, 0.13, "triangle"); }
         else if (tipo === "error") tocar(210, 0.35, 0, "sawtooth");
     }
@@ -620,7 +736,40 @@
         return { texto: "⬇️ PUERTA", color: "#166534" };
     }
 
-    // ---------------- EXCEL SHOPEE (.XLSX / .CSV) ----------------
+    function cambiarModoEscaneo(nuevoModo) {
+        modoEscaneo = nuevoModo;
+        document.getElementById("btnModoSecuencia").classList.toggle("activo-secuencia", nuevoModo === "secuencia");
+        document.getElementById("btnModoAtras").classList.toggle("activo-atras", nuevoModo === "atras");
+        document.getElementById("scannerWrap").classList.toggle("modo-atras-borde", nuevoModo === "atras");
+
+        const caja = document.getElementById("resultado");
+        caja.className = "";
+        if (nuevoModo === "atras") {
+            caja.innerHTML = `
+                <div style="font-size:1.1rem; font-weight:800; color:#c4b5fd;">📦 MODO VA ATRÁS ACTIVO</div>
+                <div class="info-guia">Cada paquete que escanees se guardará como grande / fondo</div>
+            `;
+        } else {
+            caja.innerHTML = `
+                <div style="font-size:1.1rem; font-weight:700;">Esperando escaneo...</div>
+                <div class="info-guia">Apunta a cualquiera de los 3 QR o al código de barras</div>
+            `;
+        }
+    }
+
+    // ---------------- CARGA DE EXCEL SHOPEE ----------------
+    function validarCoordenada(rawStr) {
+        const strLimpia = String(rawStr || "").replace(",", ".").trim();
+        const num = parseFloat(strLimpia);
+        // Descarta vacío, NaN o "0, 0" (ej: R da Blenda, 136)
+        if (!Number.isFinite(num) || num === 0 || Math.abs(num) < 1) {
+            return { val: null, bajaPrecision: true };
+        }
+        const partes = strLimpia.split(".");
+        const decimales = partes[1] ? partes[1].replace(/0+$/, "").length : 0;
+        return { val: num, bajaPrecision: decimales <= 4 };
+    }
+
     async function cargarExcel(e) {
         const archivo = e.target.files[0];
         if (!archivo) return;
@@ -660,14 +809,15 @@
                 const seq = String(row["Sequence"] ?? "").trim();
                 const stop = String(row["Stop"] ?? "").trim();
                 const address = String(row["Destination Address"] || row["Address"] || row["Endereço"] || row["Dirección"] || "").trim();
-                const bairro = String(row["Bairro"] || row["Neighborhood"] || "").trim();
+                const bairro = String(row["Bairro"] || row["Neighborhood"] || "").replace(/-\s*$/, "").trim();
                 const city = String(row["City"] || row["Cidade"] || "").trim();
                 const zip = String(row["Zipcode/Postal code"] || row["CEP"] || row["Zipcode"] || "").trim();
-                const latRaw = String(row["Latitude"] || row["Lat"] || "").replace(",", ".").trim();
-                const lonRaw = String(row["Longitude"] || row["Lon"] || row["Lng"] || "").replace(",", ".").trim();
 
-                const lat = parseFloat(latRaw);
-                const lon = parseFloat(lonRaw);
+                const latParsed = validarCoordenada(row["Latitude"] || row["Lat"]);
+                const lonParsed = validarCoordenada(row["Longitude"] || row["Lon"] || row["Lng"]);
+
+                const sinGPS = latParsed.val === null || lonParsed.val === null;
+                const bajaPrec = latParsed.bajaPrecision || lonParsed.bajaPrecision;
 
                 mapaExcel.set(tn, {
                     seq,
@@ -676,19 +826,20 @@
                     bairro,
                     city,
                     zip,
-                    lat: Number.isFinite(lat) ? lat : null,
-                    lon: Number.isFinite(lon) ? lon : null
+                    lat: sinGPS ? null : latParsed.val,
+                    lon: sinGPS ? null : lonParsed.val,
+                    esPinSospechoso: sinGPS || bajaPrec,
+                    pinCorregido: false
                 });
             }
 
             if (mapaExcel.size === 0) {
-                throw new Error("No se encontraron códigos BR en esta planilla.");
+                throw new Error("No se encontraron códigos BR válidos en esta planilla.");
             }
 
-            if (mapaRuta.size > 0) {
-                enriquecerYAgrupar();
-            }
+            reconstruirRutaActiva();
             guardarEstado();
+            actualizarUIProgreso();
             actualizarEstadoCargaUI();
         } catch (err) {
             console.error(err);
@@ -699,68 +850,347 @@
         }
     }
 
+    // ---------------- ALGORITMO "SENTIDO COMÚN" (TEXTO + CEP + GPS + NÚMERO) ----------------
+    function parsearDireccionInteligente(texto, zip = "") {
+        let limpio = String(texto || "")
+            .replace(/(\d)\.(\d)/g, "$1$2")
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase();
+
+        limpio = limpio
+            .replace(/^(rua|r\.|r|avenida|av\.|av|travessa|tv\.|alameda|al\.|rodovia|rod\.|estrada|est\.|praca|pca\.|largo|viela|beco)\s+/i, "")
+            .trim();
+
+        const partes = limpio.split(",");
+        let calleRaw = partes[0] || "";
+        let segNum = (partes[1] || "").trim();
+
+        let num = null;
+        if (partes.length >= 2) {
+            if (/^s\s*\/?\s*n\b/i.test(segNum)) {
+                num = null; // S/N explícito: no buscar número en Bloco/Apto
+            } else {
+                const mSeg = segNum.match(/^\s*(\d+)\b/);
+                if (mSeg) num = mSeg[1];
+            }
+        } else {
+            // Sin coma: buscar número solo si no viene precedido de bloco/apto
+            const sinComp = calleRaw.split(/\b(?:bloco|blo|bl|apto|ap|casa|sala|cond)\b/i)[0];
+            const mEsp = sinComp.match(/^(.+?)\s+(\d+)\b/);
+            if (mEsp) {
+                calleRaw = mEsp[1];
+                num = mEsp[2];
+            }
+        }
+
+        // Limpiar "Bairro..." pegado dentro de la calle (ej: "...Coelho Bairro laudisse")
+        const calleSinBairro = calleRaw
+            .replace(/\s+bairro\s+[a-z0-9\s]+$/i, "")
+            .split("-")[0];
+
+        const limpiarTextoCalle = (s) => s
+            .replace(/schimidt/g, "schmidt")
+            .replace(/sampai\b/g, "sampaio")
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        const calle = limpiarTextoCalle(calleSinBairro) || limpiarTextoCalle(calleRaw);
+        const cepNorm = String(zip || "").replace(/\D/g, "");
+        const cepValido = (cepNorm.length === 8 && !/000$/.test(cepNorm)) ? cepNorm : "";
+
+        const esCalleGenerica = /^(um|dois|tres|quatro|cinco|seis|sete|oito|nove|dez|\d{1,2})$/.test(calle);
+        const esCondominio = /\b(bloco|blo|bl\.?|apto|apartamento|ap\.?|cond|resid)\b/i.test(texto);
+
+        return { calle, num, cepValido, esCalleGenerica, esCondominio };
+    }
+
+    function similitudBigrams(a, b) {
+        if (!a || !b) return 0;
+        if (a === b) return 1;
+        if (a.length < 2 || b.length < 2) return 0;
+        if (a.includes(b) || b.includes(a)) return 0.92;
+
+        const getBigrams = (s) => {
+            const set = new Map();
+            for (let i = 0; i < s.length - 1; i++) {
+                const bg = s.slice(i, i + 2);
+                set.set(bg, (set.get(bg) || 0) + 1);
+            }
+            return set;
+        };
+        const bgA = getBigrams(a);
+        const bgB = getBigrams(b);
+        let inter = 0;
+        for (const [bg, count] of bgA.entries()) {
+            if (bgB.has(bg)) inter += Math.min(count, bgB.get(bg));
+        }
+        return (2 * inter) / ((a.length - 1) + (b.length - 1));
+    }
+
+    function distanciaMetros(lat1, lon1, lat2, lon2) {
+        if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
+        const R = 6371000;
+        const toRad = (g) => g * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // Agrupador genérico reutilizable (sirve tanto para Excel antes de Routin como para mapaRuta)
+    function construirGruposSentidoComun(listaItems) {
+        // listaItems: [{ codigo, texto, zip, lat, lon }]
+        const n = listaItems.length;
+        const parsedList = listaItems.map(it => parsearDireccionInteligente(it.texto, it.zip));
+        const padre = Array.from({ length: n }, (_, i) => i);
+        const find = (x) => (padre[x] === x ? x : (padre[x] = find(padre[x])));
+        const union = (a, b) => {
+            const ra = find(a), rb = find(b);
+            if (ra !== rb) padre[rb] = ra;
+        };
+
+        for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+                const A = listaItems[i], B = listaItems[j];
+                const pA = parsedList[i], pB = parsedList[j];
+
+                // Regla de oro: números explícitos distintos nunca se mezclan (195 Rubi vs 200 Turquesa)
+                if (pA.num !== null && pB.num !== null && pA.num !== pB.num) continue;
+
+                const sim = similitudBigrams(pA.calle, pB.calle);
+                const dist = distanciaMetros(A.lat, A.lon, B.lat, B.lon);
+                const mismoCep = Boolean(pA.cepValido && pA.cepValido === pB.cepValido);
+
+                let sonMismoLugar = false;
+
+                if (pA.num !== null && pA.num === pB.num) {
+                    if (sim >= 0.72 || dist <= 45) {
+                        sonMismoLugar = true;
+                    } else if (mismoCep) {
+                        // Regla CEP + Número blindada (resuelve Jacanã: Rua Dois 50 vs Concilia 50)
+                        if (dist <= 80) sonMismoLugar = true;
+                        else if (dist <= 350 && (pA.esCalleGenerica || pB.esCalleGenerica || (pA.esCondominio && pB.esCondominio))) {
+                            sonMismoLugar = true;
+                        }
+                    }
+                } else if (pA.num === null && pB.num === null) {
+                    // Ej: S/N o sin número
+                    if (sim >= 0.85 && (dist <= 80 || dist === Infinity)) sonMismoLugar = true;
+                    else if (dist <= 15) sonMismoLugar = true;
+                } else {
+                    if (sim >= 0.88 && dist <= 30) sonMismoLugar = true;
+                    else if (dist <= 12) sonMismoLugar = true;
+                }
+
+                if (sonMismoLugar) union(i, j);
+            }
+        }
+
+        const grupos = new Map();
+        for (let i = 0; i < n; i++) {
+            const root = find(i);
+            const gId = `grp_${root}`;
+            if (!grupos.has(gId)) grupos.set(gId, []);
+            grupos.get(gId).push(listaItems[i].codigo);
+        }
+        return grupos;
+    }
+
+    // Elige la coordenada de consenso de un grupo (evita pines solitarios corridos como el de la escuela)
+    function elegirMejorCoordenadaGrupo(codigos) {
+        const candidatos = codigos
+            .map(c => ({ codigo: c, ex: mapaExcel.get(c) }))
+            .filter(x => x.ex && x.ex.lat !== null && x.ex.lon !== null);
+
+        if (candidatos.length === 0) return { lat: null, lon: null, maestro: codigos[0] };
+        if (candidatos.length === 1) return { lat: candidatos[0].ex.lat, lon: candidatos[0].ex.lon, maestro: candidatos[0].codigo };
+
+        let mejor = candidatos[0];
+        let mejorScore = -1;
+
+        for (const cand of candidatos) {
+            let vecinosCerca = 0;
+            for (const otro of candidatos) {
+                if (distanciaMetros(cand.ex.lat, cand.ex.lon, otro.ex.lat, otro.ex.lon) <= 45) {
+                    vecinosCerca++;
+                }
+            }
+            const bonusPrecision = cand.ex.esPinSospechoso ? 0 : 0.5;
+            const score = vecinosCerca + bonusPrecision;
+            if (score > mejorScore) {
+                mejorScore = score;
+                mejor = cand;
+            }
+        }
+        return { lat: mejor.ex.lat, lon: mejor.ex.lon, maestro: mejor.codigo };
+    }
+
+    // ---------------- EXPORTAR EXCEL LIMPIO PARA ROUTIN ----------------
     function limpiarDireccionParaRoutin(address, bairro, city, zip) {
         let dir = String(address || "").replace(/(\d)\.(\d)/g, "$1$2").trim();
         dir = dir.replace(/^R\.?\s+/i, "Rua ").replace(/^Av\.?\s+/i, "Avenida ");
 
         const partesComa = dir.split(",");
         if (partesComa.length >= 2) {
-            const calleLimpia = partesComa[0].split("-")[0].trim();
-            const mNum = partesComa[1].match(/\d+/);
-            const num = mNum ? mNum[0] : "";
-            dir = num ? `${calleLimpia}, ${num}` : calleLimpia;
+            const calleLimpia = partesComa[0]
+                .replace(/\s+bairro\s+[a-z0-9\s]+$/i, "")
+                .split("-")[0]
+                .trim();
+            const seg2 = partesComa[1].trim();
+            if (/^s\s*\/?\s*n\b/i.test(seg2)) {
+                dir = calleLimpia;
+            } else {
+                const mNum = seg2.match(/\d+/);
+                dir = mNum ? `${calleLimpia}, ${mNum[0]}` : calleLimpia;
+            }
         }
 
         const extras = [bairro, city, zip].filter(Boolean).join(", ");
         return extras ? `${dir}, ${extras}` : dir;
     }
 
-    function descargarExcelLimpio() {
-        if (mapaExcel.size === 0) return;
-        if (typeof XLSX === "undefined") {
-            alert("La librería Excel no está cargada.");
-            return;
-        }
-
-        const filasLimpias = [];
-        for (const [tn, ex] of mapaExcel.entries()) {
-            const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
-            const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
-            const nombreRoutin = `${prefijoSeq}${ex.address}`;
-            const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
-
-            filasLimpias.push({
-                "Nombre": nombreRoutin,
-                "Direccion": dirLimpia,
-                "Bairro": ex.bairro,
-                "Cidade": ex.city,
-                "CEP": ex.zip,
-                "SPX_TN": tn,
-                "Latitude": ex.lat !== null ? ex.lat : "",
-                "Longitude": ex.lon !== null ? ex.lon : ""
-            });
-        }
-
-        const ws = XLSX.utils.json_to_sheet(filasLimpias);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Routin_Limpio");
-
-        const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbOut], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        const hoy = new Date().toISOString().slice(0, 10);
-        a.href = url;
-        a.download = `Routin_Limpio_${hoy}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1500);
+    async function buscarCoordenadaFaltanteOSM(ex) {
+        const queryDir = limpiarDireccionParaRoutin(ex.address, "", ex.city || "Santa Bárbara D'Oeste", "");
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(queryDir)}`;
+        try {
+            const res = await fetch(url, { headers: { "Accept-Language": "pt-BR" } });
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lon = parseFloat(data[0].lon);
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    return { lat, lon };
+                }
+            }
+        } catch (e) {}
+        return null;
     }
 
-    // ---------------- LECTURA PDF ROUTIN (COORDENADAS X/Y) ----------------
+    async function descargarExcelLimpio() {
+        if (mapaExcel.size === 0 || typeof XLSX === "undefined") return;
+
+        const btn = document.getElementById("btnExportarLimpio");
+        const estadoEl = document.getElementById("estadoCarga");
+        const metodo = document.querySelector('input[name="metodoExport"]:checked')?.value || "clasico";
+
+        btn.disabled = true;
+        const textoOriginalBtn = btn.innerText;
+
+        try {
+            // 1. Intentar reparar coordenadas 0,0 o vacías (máximo 8 consultas rápidas)
+            const sinGps = Array.from(mapaExcel.entries()).filter(([, ex]) => ex.lat === null || ex.lon === null);
+            let reparados = 0;
+            let siguenSinGps = [];
+
+            if (sinGps.length > 0 && navigator.onLine && sinGps.length <= 8) {
+                for (let i = 0; i < sinGps.length; i++) {
+                    const [tn, ex] = sinGps[i];
+                    btn.innerText = `⏳ Buscando GPS faltante (${i + 1}/${sinGps.length})...`;
+                    const coord = await buscarCoordenadaFaltanteOSM(ex);
+                    if (coord) {
+                        ex.lat = coord.lat;
+                        ex.lon = coord.lon;
+                        ex.esPinSospechoso = true;
+                        ex.pinCorregido = true;
+                        reparados++;
+                    } else {
+                        siguenSinGps.push(`${tn} (${ex.address})`);
+                    }
+                    if (i < sinGps.length - 1) await new Promise(r => setTimeout(r, 1050));
+                }
+                guardarEstado();
+            } else if (sinGps.length > 0) {
+                siguenSinGps = sinGps.map(([tn, ex]) => `${tn} (${ex.address})`);
+            }
+
+            // 2. Agrupar usando Sentido Común antes de exportar
+            btn.innerText = "⏳ Generando Excel limpio...";
+            const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+                codigo,
+                texto: ex.address,
+                zip: ex.zip,
+                lat: ex.lat,
+                lon: ex.lon
+            }));
+            const grupos = construirGruposSentidoComun(itemsExcel);
+
+            const filasLimpias = [];
+
+            for (const codigos of grupos.values()) {
+                const { lat: bestLat, lon: bestLon, maestro } = elegirMejorCoordenadaGrupo(codigos);
+                const totalGrupo = codigos.length;
+                const tagMulti = totalGrupo > 1 ? `[📦x${totalGrupo}] ` : "";
+
+                if (metodo === "agrupado") {
+                    const ex = mapaExcel.get(maestro);
+                    const tagPin = (bestLat === null || ex.esPinSospechoso) ? "[⚠️PIN?] " : "";
+                    const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+
+                    filasLimpias.push({
+                        "Nombre": `${tagMulti}${tagPin}${ex.address}`,
+                        "Direccion": dirLimpia,
+                        "Bairro": ex.bairro,
+                        "Cidade": ex.city,
+                        "CEP": ex.zip,
+                        "SPX_TN": maestro,
+                        "Latitude": bestLat !== null ? bestLat : "",
+                        "Longitude": bestLon !== null ? bestLon : ""
+                    });
+                } else {
+                    for (const tn of codigos) {
+                        const ex = mapaExcel.get(tn);
+                        const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
+                        const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
+                        const tagPin = (bestLat === null || ex.esPinSospechoso) ? "[⚠️PIN?] " : "";
+                        const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+
+                        filasLimpias.push({
+                            "Nombre": `${tagMulti}${tagPin}${prefijoSeq}${ex.address}`,
+                            "Direccion": dirLimpia,
+                            "Bairro": ex.bairro,
+                            "Cidade": ex.city,
+                            "CEP": ex.zip,
+                            "SPX_TN": tn,
+                            "Latitude": bestLat !== null ? bestLat : "",
+                            "Longitude": bestLon !== null ? bestLon : ""
+                        });
+                    }
+                }
+            }
+
+            const ws = XLSX.utils.json_to_sheet(filasLimpias);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Routin_Limpio");
+
+            const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const blob = new Blob([wbOut], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const hoy = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `Routin_${metodo === "agrupado" ? "Agrupado" : "Limpio"}_${hoy}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+            let msgExtra = `✅ Exportadas ${filasLimpias.length} filas (${metodo}).`;
+            if (reparados > 0) msgExtra += ` 🔧 ${reparados} sin GPS reparado(s).`;
+            if (siguenSinGps.length > 0) msgExtra += ` ⚠️ ${siguenSinGps.length} sin GPS: ${siguenSinGps[0]}`;
+            estadoEl.innerText = msgExtra;
+            estadoEl.style.color = siguenSinGps.length > 0 ? "#fde047" : "#4ade80";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = textoOriginalBtn;
+        }
+    }
+
+    // ---------------- CARGA DE PDF ROUTIN ----------------
     async function cargarPDF(e) {
         const archivo = e.target.files[0];
         if (!archivo) return;
@@ -773,7 +1203,7 @@
             const arrayBuffer = await archivo.arrayBuffer();
             const pdfDocument = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const lineas = await extraerLineasPDF(pdfDocument);
-            procesarLineasRuta(lineas);
+            procesarLineasPDF(lineas);
         } catch (err) {
             console.error(err);
             estadoEl.innerText = "❌ Error al leer el PDF: " + err.message;
@@ -813,8 +1243,8 @@
         return lineasTotales;
     }
 
-    function procesarLineasRuta(lineas) {
-        mapaRuta.clear();
+    function procesarLineasPDF(lineas) {
+        mapaPdfBase.clear();
         let bufferTexto = [];
 
         for (const linea of lineas) {
@@ -828,8 +1258,13 @@
                     .trim();
 
                 const matchNum = textoParada.match(/^(\d{1,3})\s+(.*)$/);
-                const numParada = matchNum ? Number(matchNum[1]) : (mapaRuta.size + 1);
+                const numParada = matchNum ? Number(matchNum[1]) : (mapaPdfBase.size + 1);
                 let detalle = matchNum ? matchNum[2] : textoParada;
+
+                const esAgrupado = /\[📦x\d+\]/.test(detalle);
+
+                // Quitar etiquetas propias [📦x9], [⚠️PIN?] si vienen en el PDF
+                detalle = detalle.replace(/^(?:\[[^\]]+\]\s*)+/, "").trim();
 
                 let refShopee = "";
                 const matchRef = detalle.match(/^(\d{1,3}\s*\/\s*\d{1,3})\s*\/\s*(.*)$/);
@@ -840,16 +1275,11 @@
 
                 const dirPDF = detalle.replace(/\.{2,}\s*$/, "").trim();
 
-                mapaRuta.set(codigoBR, {
+                mapaPdfBase.set(codigoBR, {
                     parada: numParada,
                     refShopee,
                     dirPDF,
-                    dirCompleta: dirPDF,
-                    bairro: "",
-                    lat: null,
-                    lon: null,
-                    grupoId: "",
-                    escaneado: false
+                    esAgrupado
                 });
 
                 bufferTexto = [];
@@ -858,159 +1288,100 @@
             }
         }
 
-        enriquecerYAgrupar();
+        reconstruirRutaActiva();
         guardarEstado();
         actualizarUIProgreso();
         actualizarEstadoCargaUI();
     }
 
-    // ---------------- ALGORITMO "SENTIDO COMÚN" (TEXTO + GPS + NÚMERO) ----------------
-    function parsearDireccionInteligente(texto) {
-        let limpio = String(texto || "")
-            .replace(/(\d)\.(\d)/g, "$1$2")
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-            .toLowerCase();
-
-        limpio = limpio
-            .replace(/^(rua|r\.|r|avenida|av\.|av|travessa|tv\.|alameda|al\.|rodovia|rod\.|estrada|est\.|praca|pca\.|largo|viela|beco)\s+/i, "")
-            .trim();
-
-        let calle = "";
-        let num = null;
-        const mComa = limpio.match(/^([^,]+),\s*(\d+)\b/);
-        if (mComa) {
-            calle = mComa[1];
-            num = mComa[2];
-        } else {
-            const mEsp = limpio.match(/^(.+?)\s+(\d+)\b/);
-            if (mEsp) {
-                calle = mEsp[1];
-                num = mEsp[2];
-            } else {
-                calle = limpio.split(",")[0];
-            }
-        }
-
-        calle = calle
-            .replace(/schimidt/g, "schmidt")
-            .replace(/[^a-z0-9\s]/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-
-        const rawAntesComa = limpio.split(",")[0];
-        const callePrincipal = rawAntesComa.split("-")[0]
-            .replace(/schimidt/g, "schmidt")
-            .replace(/[^a-z0-9\s]/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-
-        return {
-            calle: callePrincipal || calle,
-            calleFull: calle,
-            num
-        };
-    }
-
-    function similitudBigrams(a, b) {
-        if (!a || !b) return 0;
-        if (a === b) return 1;
-        if (a.length < 2 || b.length < 2) return 0;
-        if (a.includes(b) || b.includes(a)) return 0.92;
-
-        const getBigrams = (s) => {
-            const set = new Map();
-            for (let i = 0; i < s.length - 1; i++) {
-                const bg = s.slice(i, i + 2);
-                set.set(bg, (set.get(bg) || 0) + 1);
-            }
-            return set;
-        };
-        const bgA = getBigrams(a);
-        const bgB = getBigrams(b);
-        let inter = 0;
-        for (const [bg, count] of bgA.entries()) {
-            if (bgB.has(bg)) inter += Math.min(count, bgB.get(bg));
-        }
-        return (2 * inter) / ((a.length - 1) + (b.length - 1));
-    }
-
-    function distanciaMetros(lat1, lon1, lat2, lon2) {
-        if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
-        const R = 6371000;
-        const toRad = (g) => g * Math.PI / 180;
-        const dLat = toRad(lat2 - lat1);
-        const dLon = toRad(lon2 - lon1);
-        const a = Math.sin(dLat / 2) ** 2 +
-                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
-    function enriquecerYAgrupar() {
-        const items = [];
-        for (const [codigo, datos] of mapaRuta.entries()) {
-            const ex = mapaExcel.get(codigo);
-            if (ex) {
-                datos.dirCompleta = ex.address || datos.dirPDF;
-                datos.bairro = ex.bairro || "";
-                datos.lat = ex.lat;
-                datos.lon = ex.lon;
-            } else {
-                datos.dirCompleta = datos.dirPDF;
-            }
-            const parsed = parsearDireccionInteligente(datos.dirCompleta);
-            items.push({ codigo, datos, parsed });
-        }
-
-        const n = items.length;
-        const padre = Array.from({ length: n }, (_, i) => i);
-        const find = (x) => (padre[x] === x ? x : (padre[x] = find(padre[x])));
-        const union = (a, b) => {
-            const ra = find(a), rb = find(b);
-            if (ra !== rb) padre[rb] = ra;
-        };
-
-        for (let i = 0; i < n; i++) {
-            for (let j = i + 1; j < n; j++) {
-                const A = items[i], B = items[j];
-                const numA = A.parsed.num, numB = B.parsed.num;
-
-                // Nunca mezclar direcciones con números explícitos distintos (ej: 195 vs 200)
-                if (numA !== null && numB !== null && numA !== numB) continue;
-
-                const sim = similitudBigrams(A.parsed.calle, B.parsed.calle);
-                const dist = distanciaMetros(A.datos.lat, A.datos.lon, B.datos.lat, B.datos.lon);
-
-                let sonMismoLugar = false;
-                if (numA !== null && numA === numB) {
-                    if (sim >= 0.72 || dist <= 45) sonMismoLugar = true;
-                } else if (numA === null && numB === null) {
-                    if (sim >= 0.85 || dist <= 18) sonMismoLugar = true;
-                } else {
-                    if (sim >= 0.88 && dist <= 30) sonMismoLugar = true;
-                    else if (dist <= 12) sonMismoLugar = true;
-                }
-
-                if (sonMismoLugar) union(i, j);
-            }
-        }
-
+    // ---------------- RECONCILIACIÓN PDF + EXCEL ----------------
+    function reconstruirRutaActiva() {
+        mapaRuta.clear();
         mapaGrupos.clear();
-        for (let i = 0; i < n; i++) {
-            const root = find(i);
-            const gId = `grp_${root}`;
-            items[i].datos.grupoId = gId;
+        omitidosEnPdf = [];
 
-            if (!mapaGrupos.has(gId)) {
-                mapaGrupos.set(gId, { count: 0, paradas: [], codigos: [] });
-            }
-            const grp = mapaGrupos.get(gId);
-            grp.count += 1;
-            grp.paradas.push(items[i].datos.parada);
-            grp.codigos.push(items[i].codigo);
+        if (mapaPdfBase.size === 0) return;
+
+        // 1. Cargar paradas presentes en el PDF
+        for (const [codigo, pdfInfo] of mapaPdfBase.entries()) {
+            const ex = mapaExcel.get(codigo);
+            mapaRuta.set(codigo, {
+                parada: pdfInfo.parada,
+                refShopee: pdfInfo.refShopee,
+                dirPDF: pdfInfo.dirPDF,
+                dirCompleta: ex ? (ex.address || pdfInfo.dirPDF) : pdfInfo.dirPDF,
+                bairro: ex ? (ex.bairro || "") : "",
+                lat: ex ? ex.lat : null,
+                lon: ex ? ex.lon : null,
+                zip: ex ? (ex.zip || "") : "",
+                esPinSospechoso: ex ? ex.esPinSospechoso : false,
+                grupoId: ""
+            });
         }
 
-        for (const grp of mapaGrupos.values()) {
-            grp.paradas.sort((a, b) => a - b);
+        // 2. Si existe Excel cargado, expandir paradas agrupadas y auditar omisiones
+        if (mapaExcel.size > 0) {
+            const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+                codigo,
+                texto: ex.address,
+                zip: ex.zip,
+                lat: ex.lat,
+                lon: ex.lon
+            }));
+            const gruposExcel = construirGruposSentidoComun(itemsExcel);
+
+            // Para cada grupo del Excel: si al menos 1 código está en el PDF, heredan esa parada los demás del grupo
+            for (const codigosGrupo of gruposExcel.values()) {
+                let codigoEnPdf = codigosGrupo.find(c => mapaPdfBase.has(c));
+                if (codigoEnPdf) {
+                    const paradaHeredada = mapaPdfBase.get(codigoEnPdf).parada;
+                    for (const cod of codigosGrupo) {
+                        if (!mapaRuta.has(cod)) {
+                            const ex = mapaExcel.get(cod);
+                            mapaRuta.set(cod, {
+                                parada: paradaHeredada,
+                                refShopee: (ex.seq && ex.seq !== "-") ? `${ex.seq}/${ex.stop}` : "",
+                                dirPDF: ex.address,
+                                dirCompleta: ex.address,
+                                bairro: ex.bairro || "",
+                                lat: ex.lat,
+                                lon: ex.lon,
+                                zip: ex.zip || "",
+                                esPinSospechoso: ex.esPinSospechoso,
+                                grupoId: ""
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Auditar si algún paquete del Excel quedó completamente fuera del PDF
+            for (const [cod, ex] of mapaExcel.entries()) {
+                if (!mapaRuta.has(cod)) {
+                    omitidosEnPdf.push({ codigo: cod, address: ex.address });
+                }
+            }
+        }
+
+        // 3. Construir grupos finales sobre mapaRuta
+        const itemsRuta = Array.from(mapaRuta.entries()).map(([codigo, d]) => ({
+            codigo,
+            texto: d.dirCompleta,
+            zip: d.zip || "",
+            lat: d.lat,
+            lon: d.lon
+        }));
+        const gruposFinales = construirGruposSentidoComun(itemsRuta);
+
+        for (const [gId, codigos] of gruposFinales.entries()) {
+            const paradas = [];
+            for (const cod of codigos) {
+                const d = mapaRuta.get(cod);
+                d.grupoId = gId;
+                paradas.push(d.parada);
+            }
+            paradas.sort((a, b) => a - b);
+            mapaGrupos.set(gId, { count: codigos.length, paradas, codigos });
         }
     }
 
@@ -1027,13 +1398,13 @@
     function detectarAlertas(texto) {
         const alertas = [];
         const t = texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda)\b/.test(t)) {
+        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda|empresa|deposito|oficina)\b/.test(t)) {
             alertas.push({ texto: "🏢 COMERCIO / HORARIO", tipo: "" });
         }
         if (/\b(condominio|cond\.|conde\.|bloco|bl\s*\d|apto|apartamento|portaria)\b/.test(t)) {
             alertas.push({ texto: "🏘️ CONDOMINIO", tipo: "" });
         }
-        if (/\b(nao jogar|não jogar|quintal|portao|fundo|frente|placa|entregar|vizinho)\b/.test(t)) {
+        if (/\b(nao jogar|quintal|portao|fundo|frente|placa|entregar|vizinho|cachorro|cao|garagem|jogar)\b/.test(t)) {
             alertas.push({ texto: "⚠️ LEER NOTA", tipo: "nota" });
         }
         return alertas;
@@ -1042,8 +1413,10 @@
     // ---------------- PERSISTENCIA ----------------
     function guardarEstado() {
         try {
-            localStorage.setItem(STORAGE_RUTA, JSON.stringify(Array.from(mapaRuta.entries())));
+            localStorage.setItem(STORAGE_PDF, JSON.stringify(Array.from(mapaPdfBase.entries())));
             localStorage.setItem(STORAGE_EXCEL, JSON.stringify(Array.from(mapaExcel.entries())));
+            localStorage.setItem(STORAGE_SCAN, JSON.stringify(Array.from(setEscaneados)));
+            localStorage.setItem(STORAGE_ATRAS, JSON.stringify(Array.from(setAtras)));
         } catch (e) {
             console.warn("No se pudo guardar en localStorage:", e);
         }
@@ -1051,34 +1424,43 @@
 
     function restaurarEstado() {
         try {
+            const rawPdf = localStorage.getItem(STORAGE_PDF);
+            if (rawPdf) mapaPdfBase = new Map(JSON.parse(rawPdf));
+
             const rawEx = localStorage.getItem(STORAGE_EXCEL);
             if (rawEx) mapaExcel = new Map(JSON.parse(rawEx));
 
-            const rawRuta = localStorage.getItem(STORAGE_RUTA);
-            if (rawRuta) {
-                const entries = JSON.parse(rawRuta);
-                if (Array.isArray(entries) && entries.length > 0) {
-                    mapaRuta = new Map(entries);
-                    enriquecerYAgrupar();
-                    actualizarUIProgreso();
-                    actualizarEstadoCargaUI(true);
-                }
-            } else if (mapaExcel.size > 0) {
-                actualizarEstadoCargaUI(true);
-            }
+            const rawScan = localStorage.getItem(STORAGE_SCAN);
+            if (rawScan) setEscaneados = new Set(JSON.parse(rawScan));
+
+            const rawAtras = localStorage.getItem(STORAGE_ATRAS);
+            if (rawAtras) setAtras = new Set(JSON.parse(rawAtras));
+
+            reconstruirRutaActiva();
+            actualizarUIProgreso();
+            actualizarEstadoCargaUI(true);
+            actualizarContadorAtrasBtn();
         } catch (e) {
             console.warn("Error restaurando estado:", e);
         }
     }
 
+    function actualizarContadorAtrasBtn() {
+        document.getElementById("countAtrasBtn").innerText = setAtras.size;
+    }
+
     function actualizarEstadoCargaUI(restaurado = false) {
         const estadoEl = document.getElementById("estadoCarga");
-        const btnExport = document.getElementById("btnExportarLimpio");
-        btnExport.classList.toggle("visible", mapaExcel.size > 0);
+        const exportBox = document.getElementById("exportBox");
+        const alertaOmision = document.getElementById("alertaOmision");
 
-        if (mapaRuta.size === 0 && mapaExcel.size === 0) {
+        exportBox.classList.toggle("visible", mapaExcel.size > 0);
+
+        if (mapaPdfBase.size === 0 && mapaExcel.size === 0) {
             estadoEl.innerText = "Esperando archivos...";
             estadoEl.style.color = "#9ca3af";
+            alertaOmision.classList.remove("visible");
+            alertaOmision.innerHTML = "";
             return;
         }
 
@@ -1088,30 +1470,53 @@
         }
 
         const partes = [];
-        if (mapaRuta.size > 0) {
-            partes.push(`${restaurado ? "♻️" : "✅"} PDF: ${mapaRuta.size} paquetes (${mapaGrupos.size} direcciones)`);
+        if (mapaPdfBase.size > 0) {
+            partes.push(`${restaurado ? "♻️" : "✅"} Ruta activa: ${mapaRuta.size} paquetes (${mapaGrupos.size} direcciones)`);
         }
         if (mapaExcel.size > 0) {
-            partes.push(`📊 Excel: ${mapaExcel.size} filas` + (mapaRuta.size > 0 ? ` (${cruzados} cruzados con GPS)` : ""));
+            partes.push(`📊 Excel: ${mapaExcel.size} filas` + (mapaRuta.size > 0 ? ` (${cruzados} cruzados)` : ""));
         }
         estadoEl.innerText = partes.join(" • ");
         estadoEl.style.color = "#4ade80";
+
+        // Alertas de auditoría Excel vs PDF
+        const hayAgrupadoEnPdf = Array.from(mapaPdfBase.values()).some(x => x.esAgrupado);
+        if (hayAgrupadoEnPdf && mapaExcel.size === 0) {
+            alertaOmision.innerHTML = `⚠️ <strong>PDF Agrupado detectado:</strong> sube también el Excel original de Shopee para enlazar todos los códigos BR de cada condominio.`;
+            alertaOmision.classList.add("visible");
+        } else if (omitidosEnPdf.length > 0) {
+            const lista = omitidosEnPdf.slice(0, 4).map(o => `• <strong>${esc(o.codigo)}</strong>: ${esc(o.address)}`).join("<br>");
+            const mas = omitidosEnPdf.length > 4 ? `<br>...y ${omitidosEnPdf.length - 4} más.` : "";
+            alertaOmision.innerHTML = `⚠️ <strong>ATENCIÓN: ${omitidosEnPdf.length} paquete(s) del Excel NO salieron en el PDF de Routin:</strong><br>${lista}${mas}`;
+            alertaOmision.classList.add("visible");
+        } else {
+            alertaOmision.classList.remove("visible");
+            alertaOmision.innerHTML = "";
+        }
     }
 
-    function limpiarRuta() {
-        if (mapaRuta.size === 0 && mapaExcel.size === 0) return;
-        if (!confirm("¿Seguro que quieres borrar la ruta, el Excel y todo el progreso?")) return;
+    function limpiarTodo() {
+        if (mapaPdfBase.size === 0 && mapaExcel.size === 0 && setEscaneados.size === 0 && setAtras.size === 0) return;
+        if (!confirm("¿Iniciar un día nuevo? Se borrarán la ruta, el Excel, el progreso y las marcas de 'Va atrás'.")) return;
 
-        mapaRuta.clear();
+        mapaPdfBase.clear();
         mapaExcel.clear();
+        mapaRuta.clear();
         mapaGrupos.clear();
-        localStorage.removeItem(STORAGE_RUTA);
+        setEscaneados.clear();
+        setAtras.clear();
+        omitidosEnPdf = [];
+
+        localStorage.removeItem(STORAGE_PDF);
         localStorage.removeItem(STORAGE_EXCEL);
+        localStorage.removeItem(STORAGE_SCAN);
+        localStorage.removeItem(STORAGE_ATRAS);
 
         document.getElementById("busquedaManual").value = "";
         document.getElementById("busquedaResultados").innerHTML = "";
         actualizarUIProgreso();
         actualizarEstadoCargaUI();
+        actualizarContadorAtrasBtn();
         actualizarContadoresTabs();
 
         const caja = document.getElementById("resultado");
@@ -1122,8 +1527,8 @@
     function actualizarUIProgreso() {
         const total = mapaRuta.size;
         let cargados = 0;
-        for (const d of mapaRuta.values()) {
-            if (d.escaneado) cargados++;
+        for (const cod of mapaRuta.keys()) {
+            if (setEscaneados.has(cod)) cargados++;
         }
         const pct = total > 0 ? Math.round((cargados / total) * 100) : 0;
         document.getElementById("txtProgreso").innerText = `Cargados: ${cargados} / ${total}`;
@@ -1132,18 +1537,18 @@
     }
 
     // ---------------- PROCESAMIENTO DE LECTURA ----------------
-    function buscarCodigoEnRuta(codigoRaw) {
+    function buscarCodigoEnMapa(codigoRaw, mapaDestino) {
         const limpio = codigoRaw.trim().toUpperCase();
-        if (mapaRuta.has(limpio)) return { codigo: limpio, datos: mapaRuta.get(limpio) };
+        if (mapaDestino.has(limpio)) return { codigo: limpio, datos: mapaDestino.get(limpio) };
 
         const matchSub = limpio.match(/\b(BR[0-9A-Z]{13})\b/);
-        if (matchSub && mapaRuta.has(matchSub[1])) {
-            return { codigo: matchSub[1], datos: mapaRuta.get(matchSub[1]) };
+        if (matchSub && mapaDestino.has(matchSub[1])) {
+            return { codigo: matchSub[1], datos: mapaDestino.get(matchSub[1]) };
         }
 
         const norm = (s) => s.replace(/S/g, "5").replace(/O/g, "0");
         const buscadoNorm = norm(matchSub ? matchSub[1] : limpio);
-        for (const [cod, datos] of mapaRuta.entries()) {
+        for (const [cod, datos] of mapaDestino.entries()) {
             if (norm(cod) === buscadoNorm) return { codigo: cod, datos };
         }
         return null;
@@ -1159,17 +1564,24 @@
             ultimoTiempoLeido = ahora;
         }
 
+        // ---- MODO VA ATRÁS (Funciona incluso sin Excel ni PDF cargados) ----
+        if (modoEscaneo === "atras") {
+            procesarLecturaModoAtras(codigoTrim);
+            return;
+        }
+
+        // ---- MODO SECUENCIA NORMAL ----
         const caja = document.getElementById("resultado");
 
         if (mapaRuta.size === 0) {
             caja.className = "rojo";
-            caja.innerHTML = `<div class="parada-num">SUBE TU PDF</div><div class="info-guia">Primero carga el PDF de Routin</div>`;
+            caja.innerHTML = `<div class="parada-num">SUBE TU PDF</div><div class="info-guia">Primero carga el PDF de Routin (o cambia arriba a Modo Va Atrás)</div>`;
             emitirBeep("error");
             setTimeout(() => hablar("Sube tu PDF primero"), 150);
             return;
         }
 
-        const encontrado = buscarCodigoEnRuta(codigoTrim);
+        const encontrado = buscarCodigoEnMapa(codigoTrim, mapaRuta);
         if (!encontrado) {
             caja.className = "rojo";
             caja.innerHTML = `<div class="parada-num">NO ESTÁ EN RUTA</div><div class="info-guia">${esc(codigoTrim)}</div>`;
@@ -1180,19 +1592,91 @@
         }
 
         const { codigo, datos } = encontrado;
-        const yaEstabaEscaneado = datos.escaneado;
+        const yaEstabaEscaneado = setEscaneados.has(codigo);
 
         if (!yaEstabaEscaneado) {
-            datos.escaneado = true;
+            setEscaneados.add(codigo);
             guardarEstado();
             actualizarUIProgreso();
         }
 
+        renderizarTarjetaPaquete(codigo, datos, yaEstabaEscaneado);
+
+        const grp = mapaGrupos.get(datos.grupoId);
+        const totalBultos = grp ? grp.count : 1;
+        const vaAtras = setAtras.has(codigo);
+        const sufijoVoz = vaAtras ? ". Va atrás" : "";
+
+        if (yaEstabaEscaneado) {
+            emitirBeep("duplicado");
+            setTimeout(() => hablar(`Repetido. Parada ${datos.parada}${sufijoVoz}`), 220);
+            if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
+        } else if (totalBultos > 1) {
+            emitirBeep("multi");
+            setTimeout(() => hablar(`Parada ${datos.parada}. ${totalBultos} bultos${sufijoVoz}`), 260);
+            if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+        } else {
+            emitirBeep("ok");
+            setTimeout(() => hablar(`Parada ${datos.parada}${sufijoVoz}`), 150);
+            if (navigator.vibrate) navigator.vibrate(150);
+        }
+    }
+
+    function procesarLecturaModoAtras(codigoTrim) {
+        const caja = document.getElementById("resultado");
+
+        // Resolver código real si ya está en ruta o Excel
+        const enRuta = buscarCodigoEnMapa(codigoTrim, mapaRuta);
+        const enExcel = !enRuta ? buscarCodigoEnMapa(codigoTrim, mapaExcel) : null;
+        const mSub = codigoTrim.match(/\b(BR[0-9A-Z]{13})\b/);
+        const codigo = enRuta ? enRuta.codigo : (enExcel ? enExcel.codigo : (mSub ? mSub[1] : codigoTrim));
+
+        const yaEstaba = setAtras.has(codigo);
+        if (!yaEstaba) {
+            setAtras.add(codigo);
+            guardarEstado();
+            actualizarContadorAtrasBtn();
+        }
+
+        const infoRuta = enRuta ? enRuta.datos : null;
+        const infoDir = infoRuta ? infoRuta.dirCompleta : (enExcel ? enExcel.datos.address : "Se vinculará automáticamente al subir Excel/PDF");
+        const paradaTexto = infoRuta ? `PARADA N° ${infoRuta.parada}` : `GUARDADO ATRÁS (${setAtras.size})`;
+
+        caja.className = yaEstaba ? "ambar" : "morado";
+        caja.innerHTML = `
+            <div class="res-top">
+                <div class="parada-num">${paradaTexto}</div>
+                <div class="zona-badge" style="background:#f97316;">🚚 VA ATRÁS</div>
+            </div>
+            <div class="estado-tag">
+                ${yaEstaba ? "⚠️ YA ESTABA MARCADO PARA ATRÁS" : `✅ MARCADO PARA ATRÁS (Total: ${setAtras.size})`}
+            </div>
+            <div class="info-direccion">${esc(infoDir)}</div>
+            <div class="info-guia">${esc(codigo)}</div>
+            <div class="quick-actions">
+                <button class="btn-mini" onclick="togglePaqueteAtras('${esc(codigo)}', false)">↩️ Quitar de atrás</button>
+            </div>
+        `;
+
+        if (yaEstaba) {
+            emitirBeep("duplicado");
+            setTimeout(() => hablar(infoRuta ? `Ya marcado atrás. Parada ${infoRuta.parada}` : "Ya marcado atrás"), 200);
+            if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
+        } else {
+            emitirBeep("atras");
+            setTimeout(() => hablar(infoRuta ? `Atrás. Parada ${infoRuta.parada}` : "Marcado atrás"), 180);
+            if (navigator.vibrate) navigator.vibrate([100, 50, 140]);
+        }
+    }
+
+    function renderizarTarjetaPaquete(codigo, datos, yaEstabaEscaneado) {
+        const caja = document.getElementById("resultado");
         const grp = mapaGrupos.get(datos.grupoId);
         const totalBultos = grp ? grp.count : 1;
         const zona = obtenerZonaFiorino(datos.parada, mapaRuta.size);
         const blocoApto = extraerBlocoApto(datos.dirCompleta);
         const alertas = detectarAlertas(datos.dirCompleta);
+        const vaAtras = setAtras.has(codigo);
 
         let escaneadosDir = 0;
         let mismosApto = 0;
@@ -1202,18 +1686,23 @@
             for (const codGrp of grp.codigos) {
                 const pkg = mapaRuta.get(codGrp);
                 if (!pkg) continue;
-                if (pkg.escaneado) escaneadosDir++;
+                if (setEscaneados.has(codGrp)) escaneadosDir++;
                 if (blocoApto && codGrp !== codigo && extraerBlocoApto(pkg.dirCompleta) === blocoApto) {
                     mismosApto++;
                 }
             }
             const ordenados = grp.codigos
-                .map(c => mapaRuta.get(c))
-                .filter(Boolean)
-                .sort((a, b) => a.parada - b.parada);
-            for (const pkg of ordenados) {
-                chipsHtml += `<span class="chip-parada ${pkg.escaneado ? "ok" : ""}">#${pkg.parada}${pkg.escaneado ? " ✓" : ""}</span>`;
+                .map(c => ({ c, d: mapaRuta.get(c) }))
+                .filter(x => x.d)
+                .sort((a, b) => a.d.parada - b.d.parada);
+            for (const { c, d } of ordenados) {
+                const ok = setEscaneados.has(c);
+                chipsHtml += `<span class="chip-parada ${ok ? "ok" : ""}">#${d.parada}${ok ? " ✓" : ""}</span>`;
             }
+        }
+
+        if (datos.esPinSospechoso) {
+            alertas.push({ texto: "📍 PIN DUDOSO", tipo: "pin" });
         }
 
         const alertasHtml = alertas.length > 0
@@ -1242,6 +1731,7 @@
                 <div class="parada-num">PARADA N° ${datos.parada}</div>
                 <div class="zona-badge" style="background:${zona.color};">${zona.texto}</div>
             </div>
+            ${vaAtras ? `<div class="badge-atras-grande">🚚 PAQUETE GRANDE / UBICADO ATRÁS</div>` : ""}
             ${yaEstabaEscaneado
                 ? `<div class="estado-tag">⚠️ YA ESCANEADO ANTERIORMENTE</div>`
                 : `<div class="estado-tag">✅ REGISTRADO EN CARGA</div>`}
@@ -1254,6 +1744,9 @@
             ${datos.bairro ? `<div class="info-bairro">${esc(datos.bairro)}</div>` : ""}
             <div class="info-guia">${esc(codigo)}</div>
             <div class="quick-actions">
+                <button class="btn-mini ${vaAtras ? "atras-on" : ""}" onclick="togglePaqueteAtras('${esc(codigo)}')">
+                    ${vaAtras ? "↩️ Quitar atrás" : "📦 Mandar atrás"}
+                </button>
                 <button class="btn-mini" onclick="copiarMensaje(this, '${esc(codigo)}', 'camino')">💬 Camino</button>
                 <button class="btn-mini" onclick="copiarMensaje(this, '${esc(codigo)}', 'puerta')">💬 Puerta</button>
                 <button class="btn-mini" onclick="copiarMensaje(this, '${esc(codigo)}', 'ausente')">💬 Ausente</button>
@@ -1261,27 +1754,32 @@
                 <button class="btn-mini" onclick="desmarcarPaquete('${esc(codigo)}')">Desmarcar</button>
             </div>
         `;
+    }
 
-        if (yaEstabaEscaneado) {
-            emitirBeep("duplicado");
-            setTimeout(() => hablar(`Repetido. Parada ${datos.parada}`), 220);
-            if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
-        } else if (totalBultos > 1) {
-            emitirBeep("multi");
-            setTimeout(() => hablar(`Parada ${datos.parada}. ${totalBultos} bultos`), 260);
-            if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
-        } else {
-            emitirBeep("ok");
-            setTimeout(() => hablar(`Parada ${datos.parada}`), 150);
-            if (navigator.vibrate) navigator.vibrate(150);
+    function togglePaqueteAtras(codigo, forzarEstado = null) {
+        const nuevoEstado = forzarEstado !== null ? forzarEstado : !setAtras.has(codigo);
+        if (nuevoEstado) setAtras.add(codigo);
+        else setAtras.delete(codigo);
+
+        guardarEstado();
+        actualizarContadorAtrasBtn();
+
+        if (modoEscaneo === "atras" && !nuevoEstado) {
+            const caja = document.getElementById("resultado");
+            caja.className = "";
+            caja.innerHTML = `<div style="font-weight:700;">Quitado de 'Va atrás'</div><div class="info-guia">${esc(codigo)}</div>`;
+        } else if (mapaRuta.has(codigo)) {
+            renderizarTarjetaPaquete(codigo, mapaRuta.get(codigo), setEscaneados.has(codigo));
+        }
+
+        if (document.getElementById("modalLista").classList.contains("abierto")) {
+            renderizarListaModal();
         }
     }
 
     // ---------------- COPIADO RÁPIDO DE MENSAJES ----------------
     async function copiarMensaje(btn, codigo, tipo) {
-        const datos = mapaRuta.get(codigo);
-        if (!datos) return;
-
+        if (!mapaRuta.has(codigo)) return;
         const cod4 = codigo.slice(-4);
         let msg = "";
         if (tipo === "camino") {
@@ -1316,11 +1814,12 @@
     }
 
     function desmarcarPaquete(codigo) {
+        if (!mapaRuta.has(codigo)) return;
         const datos = mapaRuta.get(codigo);
-        if (!datos) return;
-        datos.escaneado = false;
+        setEscaneados.delete(codigo);
         guardarEstado();
         actualizarUIProgreso();
+
         const caja = document.getElementById("resultado");
         caja.className = "";
         caja.innerHTML = `<div style="font-weight:700;">Parada N° ${datos.parada} desmarcada</div><div class="info-guia">${esc(codigo)}</div>`;
@@ -1353,20 +1852,25 @@
             return;
         }
 
-        cont.innerHTML = coincidencias.map(({ codigo, datos }) => `
-            <div class="busqueda-item">
-                <div class="lista-row-info">
-                    <strong>#${datos.parada}</strong> ${datos.escaneado ? "✅" : "⏳"} - ${esc(datos.dirCompleta.slice(0, 50))}
-                    <div style="font-size:0.75rem; color:#9ca3af; font-family:monospace;">${esc(codigo)}</div>
+        cont.innerHTML = coincidencias.map(({ codigo, datos }) => {
+            const ok = setEscaneados.has(codigo);
+            const atrasTag = setAtras.has(codigo) ? "🚚" : "";
+            return `
+                <div class="busqueda-item">
+                    <div class="lista-row-info">
+                        <strong>#${datos.parada}</strong> ${ok ? "✅" : "⏳"} ${atrasTag} - ${esc(datos.dirCompleta.slice(0, 48))}
+                        <div style="font-size:0.75rem; color:#9ca3af; font-family:monospace;">${esc(codigo)}</div>
+                    </div>
+                    <button onclick="seleccionarManual('${esc(codigo)}')">Ubicar</button>
                 </div>
-                <button onclick="seleccionarManual('${esc(codigo)}')">Ubicar</button>
-            </div>
-        `).join("");
+            `;
+        }).join("");
     }
 
     function seleccionarManual(codigo) {
         document.getElementById("busquedaManual").value = "";
         document.getElementById("busquedaResultados").innerHTML = "";
+        if (modoEscaneo === "atras") cambiarModoEscaneo("secuencia");
         procesarLectura(codigo, true);
     }
 
@@ -1385,21 +1889,23 @@
         document.getElementById("tabFaltantes").classList.toggle("activa", tab === "faltantes");
         document.getElementById("tabCargados").classList.toggle("activa", tab === "cargados");
         document.getElementById("tabMulti").classList.toggle("activa", tab === "multi");
+        document.getElementById("tabAtras").classList.toggle("activa", tab === "atras");
         renderizarListaModal();
     }
 
     function actualizarContadoresTabs() {
         let faltantes = 0, cargados = 0, multiDirs = 0;
-        for (const d of mapaRuta.values()) {
-            if (d.escaneado) cargados++;
+        for (const cod of mapaRuta.keys()) {
+            if (setEscaneados.has(cod)) cargados++;
             else faltantes++;
         }
         for (const g of mapaGrupos.values()) {
             if (g.count > 1) multiDirs++;
         }
-        document.getElementById("tabFaltantes").innerText = `Faltantes (${faltantes})`;
-        document.getElementById("tabCargados").innerText = `Cargados (${cargados})`;
-        document.getElementById("tabMulti").innerText = `Multibulto (${multiDirs})`;
+        document.getElementById("tabFaltantes").innerText = `Faltan (${faltantes})`;
+        document.getElementById("tabCargados").innerText = `Listos (${cargados})`;
+        document.getElementById("tabMulti").innerText = `Multi (${multiDirs})`;
+        document.getElementById("tabAtras").innerText = `Atrás (${setAtras.size})`;
     }
 
     function renderizarListaModal() {
@@ -1407,12 +1913,45 @@
         const cont = document.getElementById("listaModalContenido");
         const filtro = document.getElementById("filtroModal").value.trim().toUpperCase();
 
+        // Pestaña Atrás (muestra incluso códigos escaneados en distribuidor antes de subir archivos)
+        if (tabActual === "atras") {
+            const listaAtras = Array.from(setAtras).map(codigo => {
+                const d = mapaRuta.get(codigo);
+                const ex = mapaExcel.get(codigo);
+                return {
+                    codigo,
+                    parada: d ? d.parada : null,
+                    dir: d ? d.dirCompleta : (ex ? ex.address : "Sin archivos cargados aún"),
+                    escaneado: setEscaneados.has(codigo)
+                };
+            }).sort((a, b) => (a.parada ?? 9999) - (b.parada ?? 9999))
+              .filter(item => !filtro || item.codigo.includes(filtro) || item.dir.toUpperCase().includes(filtro) || String(item.parada) === filtro);
+
+            if (listaAtras.length === 0) {
+                cont.innerHTML = `<div style="text-align:center; color:#9ca3af; padding:20px;">No hay paquetes marcados para ir atrás.</div>`;
+                return;
+            }
+
+            cont.innerHTML = listaAtras.map(item => `
+                <div class="lista-row">
+                    <div class="lista-row-info">
+                        <strong>${item.parada !== null ? `Parada #${item.parada}` : "⏳ Pendiente de ruta"}</strong> ${item.escaneado ? "✅" : ""} 🚚
+                        <div>${esc(item.dir)}</div>
+                        <small>${esc(item.codigo)}</small>
+                    </div>
+                    <button class="btn-icon" onclick="togglePaqueteAtras('${esc(item.codigo)}', false)">Quitar</button>
+                </div>
+            `).join("");
+            return;
+        }
+
+        // Pestaña Multibulto agrupada
         if (tabActual === "multi") {
             const grupos = [];
             for (const [gId, grp] of mapaGrupos.entries()) {
                 if (grp.count <= 1) continue;
                 const paquetes = grp.codigos
-                    .map(c => ({ codigo: c, ...mapaRuta.get(c) }))
+                    .map(c => ({ codigo: c, ...mapaRuta.get(c), escaneado: setEscaneados.has(c) }))
                     .sort((a, b) => a.parada - b.parada);
 
                 if (filtro) {
@@ -1443,7 +1982,7 @@
                 const filasHtml = g.paquetes.map(item => `
                     <div class="lista-row">
                         <div class="lista-row-info">
-                            <strong>Parada #${item.parada}</strong> ${item.escaneado ? "✅" : "⏳"}
+                            <strong>Parada #${item.parada}</strong> ${item.escaneado ? "✅" : "⏳"} ${setAtras.has(item.codigo) ? "🚚" : ""}
                             <div>${esc(item.dirCompleta)}</div>
                             <small>${esc(item.codigo)}</small>
                         </div>
@@ -1470,8 +2009,9 @@
             return;
         }
 
+        // Pestañas Faltantes / Cargados
         const items = Array.from(mapaRuta.entries())
-            .map(([codigo, datos]) => ({ codigo, ...datos }))
+            .map(([codigo, datos]) => ({ codigo, ...datos, escaneado: setEscaneados.has(codigo) }))
             .sort((a, b) => a.parada - b.parada)
             .filter(item => {
                 if (tabActual === "faltantes" && item.escaneado) return false;
@@ -1493,10 +2033,11 @@
         cont.innerHTML = items.map(item => {
             const grp = mapaGrupos.get(item.grupoId);
             const multiTag = (grp && grp.count > 1) ? ` • 📦 x${grp.count}` : "";
+            const atrasTag = setAtras.has(item.codigo) ? " 🚚" : "";
             return `
                 <div class="lista-row">
                     <div class="lista-row-info">
-                        <strong>Parada #${item.parada}${multiTag}</strong> ${item.escaneado ? "✅" : ""}
+                        <strong>Parada #${item.parada}${multiTag}</strong> ${item.escaneado ? "✅" : ""}${atrasTag}
                         <div>${esc(item.dirCompleta)}</div>
                         <small>${esc(item.codigo)}</small>
                     </div>
