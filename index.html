@@ -127,6 +127,10 @@
             transition: border-color 0.2s ease;
         }
         .scanner-wrap.modo-atras-borde { border-color: #a78bfa; }
+        /* Efecto espejo visual en cámara selfie sin afectar decodificación */
+        #scannerWrap.modo-selfie #reader video {
+            transform: scaleX(-1) !important;
+        }
         #reader { width: 100%; min-height: 215px; }
         .scanner-controls {
             display: flex;
@@ -326,17 +330,13 @@
             gap: 7px;
             cursor: pointer;
         }
-        .export-check {
-            border-top: 1px solid var(--border);
-            padding-top: 7px;
-            margin-bottom: 8px;
-            font-size: 0.8rem;
+        .resumen-sin-gps {
+            font-size: 0.78rem;
             color: #fde047;
-            display: flex;
-            align-items: flex-start;
-            gap: 7px;
-            cursor: pointer;
+            margin-bottom: 8px;
+            display: none;
         }
+        .resumen-sin-gps.visible { display: block; }
         .btn-export {
             width: 100%;
             background: #1d4ed8;
@@ -421,25 +421,42 @@
             flex-direction: column;
             gap: 6px;
         }
+        .pines-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.76rem;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+        }
         .pin-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 8px;
             background: rgba(0, 0, 0, 0.25);
-            padding: 6px 8px;
+            padding: 7px 8px;
             border-radius: 6px;
         }
-        .pin-row a {
-            background: #d97706;
+        .pin-row-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        .pin-btn-map {
+            background: #b45309;
             color: #fff;
             text-decoration: none;
-            padding: 4px 8px;
+            padding: 4px 7px;
             border-radius: 5px;
             font-weight: 700;
-            font-size: 0.74rem;
+            font-size: 0.72rem;
+            text-align: center;
             white-space: nowrap;
         }
+        .pin-btn-map.gps { background: #1d4ed8; }
 
         /* Modal Lista de Control */
         .modal-backdrop {
@@ -634,10 +651,7 @@
                         <span><strong>Método Agrupado:</strong> 1 parada por dirección en Routin</span>
                     </label>
                 </div>
-                <label class="export-check">
-                    <input type="checkbox" id="chkSinGpsSospechosos">
-                    <span>Quitar GPS a pines sospechosos (para ubicarlos a mano en Routin)</span>
-                </label>
+                <div id="resumenQuitarGps" class="resumen-sin-gps"></div>
                 <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">
                     ⬇️ Descargar Excel limpio para Routin
                 </button>
@@ -682,6 +696,7 @@
     const STORAGE_EXCEL = "escaner_fiorino_excel_v3";
     const STORAGE_SCAN = "escaner_fiorino_scan_v3";
     const STORAGE_ATRAS = "escaner_fiorino_atras_v3";
+    const STORAGE_QUITAR_GPS = "escaner_fiorino_quitargps_v3";
     const COOLDOWN_MS = 2500;
 
     let html5QrCode = null;
@@ -705,11 +720,12 @@
     let mapaExcel = new Map();
     let setEscaneados = new Set();
     let setAtras = new Set();
+    let setQuitarGps = new Set();
 
     let mapaRuta = new Map();
     let mapaGrupos = new Map();
     let omitidosEnPdf = [];
-    let pinesSospechosos = []; // [{ codigo, address, city, motivo }]
+    let pinesSospechosos = []; // [{ codigo, address, city, lat, lon, motivo }]
 
     let tabActual = "faltantes";
 
@@ -853,6 +869,7 @@
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
             mapaExcel.clear();
+            setQuitarGps.clear();
 
             for (const row of rows) {
                 let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || row["Código"] || "").trim().toUpperCase();
@@ -914,12 +931,11 @@
         }
     }
 
-    // ---------------- DETECTOR DE PINES SOSPECHOSOS (MÉTRICA DE CALLE + SALTO) ----------------
+    // ---------------- DETECTOR DE PINES SOSPECHOSOS ----------------
     function analizarPinesSospechososExcel() {
         pinesSospechosos = [];
         if (mapaExcel.size === 0) return;
 
-        // 1. Agrupar por calle + ciudad para comparar numeración métrica vs metros GPS
         const porCalle = new Map();
         for (const [codigo, ex] of mapaExcel.entries()) {
             const p = parsearDireccionInteligente(ex.address, ex.zip);
@@ -930,7 +946,6 @@
         }
 
         const fallosPorCodigo = new Map();
-        const totalCompPorCodigo = new Map();
 
         for (const lista of porCalle.values()) {
             if (lista.length < 2) continue;
@@ -942,13 +957,9 @@
                     if (diffNum < 60) continue;
 
                     const dist = distanciaMetros(A.ex.lat, A.ex.lon, B.ex.lat, B.ex.lon);
-                    if (dist > 6000) continue; // Distintas secciones/ciudades
-
-                    totalCompPorCodigo.set(A.codigo, (totalCompPorCodigo.get(A.codigo) || 0) + 1);
-                    totalCompPorCodigo.set(B.codigo, (totalCompPorCodigo.get(B.codigo) || 0) + 1);
+                    if (dist > 6000) continue;
 
                     const discrepancia = Math.abs(dist - diffNum);
-                    // Detecta pines muy corridos (ej: Rua Itália, 30 vs 365 = 148m en vez de ~335m)
                     if (discrepancia >= 120 && (dist < diffNum * 0.55 || dist > diffNum * 1.65 + 50)) {
                         fallosPorCodigo.set(A.codigo, (fallosPorCodigo.get(A.codigo) || 0) + 1);
                         fallosPorCodigo.set(B.codigo, (fallosPorCodigo.get(B.codigo) || 0) + 1);
@@ -957,14 +968,12 @@
             }
         }
 
-        // Si hay 3+ paquetes en la calle y solo 1 falla contra todos (ej: #30 vs #365,#545,#612,#889), marcamos al culpable
         for (const lista of porCalle.values()) {
             if (lista.length < 2) continue;
             const conFallos = lista.filter(x => (fallosPorCodigo.get(x.codigo) || 0) > 0);
             if (conFallos.length === 0) continue;
 
             if (lista.length >= 3) {
-                // Ordenar por proporción de fallos
                 let maxFallo = 0;
                 for (const x of conFallos) {
                     const f = fallosPorCodigo.get(x.codigo) || 0;
@@ -976,7 +985,6 @@
                         x.ex.esPinSospechoso = true;
                         x.ex.motivoSospecha = x.ex.motivoSospecha || "Pin fuera de línea en la calle";
                     } else if (f === 1 && maxFallo >= 2) {
-                        // Era víctima de 1 solo paquete malo en la calle
                         continue;
                     } else if (f > 0 && maxFallo === 1) {
                         x.ex.esPinSospechoso = true;
@@ -984,7 +992,6 @@
                     }
                 }
             } else {
-                // Solo 2 paquetes en la calle y chocan fuerte: marcamos ambos
                 for (const x of conFallos) {
                     x.ex.esPinSospechoso = true;
                     x.ex.motivoSospecha = x.ex.motivoSospecha || "Desvío métrico en calle";
@@ -998,9 +1005,38 @@
                     codigo,
                     address: ex.address,
                     city: ex.city || "Santa Bárbara D'Oeste",
+                    lat: ex.lat,
+                    lon: ex.lon,
                     motivo: ex.motivoSospecha || "Pin sospechoso"
                 });
             }
+        }
+    }
+
+    function toggleQuitarGps(codigo, marcado) {
+        if (marcado) setQuitarGps.add(codigo);
+        else setQuitarGps.delete(codigo);
+        guardarEstado();
+        actualizarResumenQuitarGps();
+    }
+
+    function marcarTodosSospechosos(marcar) {
+        for (const p of pinesSospechosos) {
+            if (marcar) setQuitarGps.add(p.codigo);
+            else setQuitarGps.delete(p.codigo);
+        }
+        guardarEstado();
+        actualizarEstadoCargaUI();
+    }
+
+    function actualizarResumenQuitarGps() {
+        const el = document.getElementById("resumenQuitarGps");
+        if (setQuitarGps.size > 0) {
+            el.innerText = `📍 ${setQuitarGps.size} dirección(es) marcada(s) irán SIN GPS para ubicarlas en Routin.`;
+            el.classList.add("visible");
+        } else {
+            el.innerText = "";
+            el.classList.remove("visible");
         }
     }
 
@@ -1219,17 +1255,19 @@
         const btn = document.getElementById("btnExportarLimpio");
         const estadoEl = document.getElementById("estadoCarga");
         const metodo = document.querySelector('input[name="metodoExport"]:checked')?.value || "clasico";
-        const quitarGpsSospechosos = document.getElementById("chkSinGpsSospechosos").checked;
 
         btn.disabled = true;
         const textoOriginalBtn = btn.innerText;
 
         try {
-            const sinGps = Array.from(mapaExcel.entries()).filter(([, ex]) => ex.lat === null || ex.lon === null);
+            // Solo repara 0,0 que NO hayan sido marcados por el usuario para ir sin GPS
+            const sinGps = Array.from(mapaExcel.entries()).filter(
+                ([tn, ex]) => (ex.lat === null || ex.lon === null) && !setQuitarGps.has(tn)
+            );
             let reparados = 0;
             let siguenSinGps = [];
 
-            if (!quitarGpsSospechosos && sinGps.length > 0 && navigator.onLine && sinGps.length <= 8) {
+            if (sinGps.length > 0 && navigator.onLine && sinGps.length <= 8) {
                 for (let i = 0; i < sinGps.length; i++) {
                     const [tn, ex] = sinGps[i];
                     btn.innerText = `⏳ Buscando GPS faltante (${i + 1}/${sinGps.length})...`;
@@ -1271,10 +1309,10 @@
 
                 if (metodo === "agrupado") {
                     const ex = mapaExcel.get(maestro);
+                    const omitirGps = codigos.some(c => setQuitarGps.has(c));
                     const esSospechoso = bestLat === null || ex.esPinSospechoso;
                     const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                     const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
-                    const omitirGps = quitarGpsSospechosos && esSospechoso;
 
                     filasLimpias.push({
                         "Nombre": `${tagMulti}${tagPin}${ex.address}`,
@@ -1289,12 +1327,12 @@
                 } else {
                     for (const tn of codigos) {
                         const ex = mapaExcel.get(tn);
+                        const omitirGps = setQuitarGps.has(tn);
                         const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
                         const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
                         const esSospechoso = bestLat === null || ex.esPinSospechoso;
                         const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                         const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
-                        const omitirGps = quitarGpsSospechosos && esSospechoso;
 
                         filasLimpias.push({
                             "Nombre": `${tagMulti}${tagPin}${prefijoSeq}${ex.address}`,
@@ -1328,12 +1366,13 @@
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(url), 1500);
 
+            actualizarEstadoCargaUI();
             let msgExtra = `✅ Exportadas ${filasLimpias.length} filas (${metodo}).`;
-            if (reparados > 0) msgExtra += ` 🔧 ${reparados} sin GPS reparado(s).`;
-            if (siguenSinGps.length > 0) msgExtra += ` ⚠️ ${siguenSinGps.length} sin GPS: ${siguenSinGps[0]}`;
+            if (setQuitarGps.size > 0) msgExtra += ` 📍 ${setQuitarGps.size} sin GPS para Routin.`;
+            if (reparados > 0) msgExtra += ` 🔧 ${reparados} reparado(s).`;
+            if (siguenSinGps.length > 0) msgExtra += ` ⚠️ ${siguenSinGps.length} sin GPS.`;
             estadoEl.innerText = msgExtra;
             estadoEl.style.color = siguenSinGps.length > 0 ? "#fde047" : "#4ade80";
-            actualizarEstadoCargaUI();
         } finally {
             btn.disabled = false;
             btn.innerText = textoOriginalBtn;
@@ -1562,6 +1601,7 @@
             localStorage.setItem(STORAGE_EXCEL, JSON.stringify(Array.from(mapaExcel.entries())));
             localStorage.setItem(STORAGE_SCAN, JSON.stringify(Array.from(setEscaneados)));
             localStorage.setItem(STORAGE_ATRAS, JSON.stringify(Array.from(setAtras)));
+            localStorage.setItem(STORAGE_QUITAR_GPS, JSON.stringify(Array.from(setQuitarGps)));
         } catch (e) {
             console.warn("No se pudo guardar en localStorage:", e);
         }
@@ -1584,6 +1624,9 @@
             const rawAtras = localStorage.getItem(STORAGE_ATRAS);
             if (rawAtras) setAtras = new Set(JSON.parse(rawAtras));
 
+            const rawQG = localStorage.getItem(STORAGE_QUITAR_GPS);
+            if (rawQG) setQuitarGps = new Set(JSON.parse(rawQG));
+
             reconstruirRutaActiva();
             actualizarUIProgreso();
             actualizarEstadoCargaUI(true);
@@ -1604,6 +1647,7 @@
         const alertaPines = document.getElementById("alertaPines");
 
         exportBox.classList.toggle("visible", mapaExcel.size > 0);
+        actualizarResumenQuitarGps();
 
         if (mapaPdfBase.size === 0 && mapaExcel.size === 0) {
             estadoEl.innerText = "Esperando archivos...";
@@ -1643,22 +1687,46 @@
             alertaOmision.innerHTML = "";
         }
 
-        // Mostrar lista desplegable de pines sospechosos detectados
+        // Lista desplegable de pines sospechosos con selección individual + Pin Shopee + Calle limpia
         if (pinesSospechosos.length > 0) {
             document.getElementById("alertaPinesResumen").innerText =
                 `⚠️ ${pinesSospechosos.length} pin(es) sospechoso(s) detectado(s) — Tocar para revisar`;
-            document.getElementById("alertaPinesBody").innerHTML = pinesSospechosos.map(p => {
-                const qMaps = encodeURIComponent(`${p.address}, ${p.city}, SP, Brasil`);
+
+            const toolbar = `
+                <div class="pines-toolbar">
+                    <span>Marca los que irán <strong>SIN GPS</strong> a Routin:</span>
+                    <span style="display:flex; gap:5px;">
+                        <button type="button" class="btn-mini" onclick="marcarTodosSospechosos(true)">Todos</button>
+                        <button type="button" class="btn-mini" onclick="marcarTodosSospechosos(false)">Ninguno</button>
+                    </span>
+                </div>
+            `;
+
+            const filasHtml = pinesSospechosos.map(p => {
+                const dirSoloCalle = limpiarDireccionParaRoutin(p.address, "", p.city, "");
+                const qCalle = encodeURIComponent(`${dirSoloCalle}, SP, Brasil`);
+                const pinShopeeBtn = (p.lat !== null && p.lon !== null)
+                    ? `<a class="pin-btn-map gps" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}">📍 Pin</a>`
+                    : "";
+                const checked = setQuitarGps.has(p.codigo) ? "checked" : "";
                 return `
                     <div class="pin-row">
-                        <div style="min-width:0; word-break:break-word;">
-                            <strong>${esc(p.address)}</strong>
-                            <div style="font-size:0.74rem; color:#fcd34d;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
+                        <label style="display:flex; align-items:flex-start; gap:7px; flex:1; min-width:0; cursor:pointer;">
+                            <input type="checkbox" ${checked} onchange="toggleQuitarGps('${esc(p.codigo)}', this.checked)" style="margin-top:3px; flex-shrink:0;">
+                            <div style="min-width:0; word-break:break-word;">
+                                <strong>${esc(p.address)}</strong>
+                                <div style="font-size:0.73rem; color:#fcd34d;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
+                            </div>
+                        </label>
+                        <div class="pin-row-actions">
+                            ${pinShopeeBtn}
+                            <a class="pin-btn-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qCalle}">🔍 Calle</a>
                         </div>
-                        <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qMaps}">🗺️ Maps</a>
                     </div>
                 `;
             }).join("");
+
+            document.getElementById("alertaPinesBody").innerHTML = toolbar + filasHtml;
             alertaPines.classList.add("visible");
         } else {
             alertaPines.classList.remove("visible");
@@ -1675,6 +1743,7 @@
         mapaGrupos.clear();
         setEscaneados.clear();
         setAtras.clear();
+        setQuitarGps.clear();
         omitidosEnPdf = [];
         pinesSospechosos = [];
 
@@ -1682,6 +1751,7 @@
         localStorage.removeItem(STORAGE_EXCEL);
         localStorage.removeItem(STORAGE_SCAN);
         localStorage.removeItem(STORAGE_ATRAS);
+        localStorage.removeItem(STORAGE_QUITAR_GPS);
 
         document.getElementById("busquedaManual").value = "";
         document.getElementById("busquedaResultados").innerHTML = "";
@@ -2214,7 +2284,7 @@
         }).join("");
     }
 
-    // ---------------- CÁMARA, SELFIE Y LINTERNA ----------------
+    // ---------------- CÁMARA, SELFIE (ESPEJO) Y LINTERNA ----------------
     async function iniciarEscaner() {
         if (isScannerRunning || scannerBusy || scannerPausadoManual) return;
         scannerBusy = true;
@@ -2231,6 +2301,8 @@
                     }
                 });
             }
+
+            document.getElementById("scannerWrap").classList.toggle("modo-selfie", usarCamaraFrontal);
 
             await html5QrCode.start(
                 { facingMode: usarCamaraFrontal ? "user" : "environment" },
@@ -2280,6 +2352,7 @@
         const btn = document.getElementById("btnCamara");
         btn.classList.toggle("activo", usarCamaraFrontal);
         btn.innerText = usarCamaraFrontal ? "📷 Trasera" : "🤳 Selfie";
+        document.getElementById("scannerWrap").classList.toggle("modo-selfie", usarCamaraFrontal);
 
         if (estabaCorriendo && !scannerPausadoManual) {
             await iniciarEscaner();
