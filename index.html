@@ -764,6 +764,10 @@
     let omitidosEnPdf = [];
     let pinesSospechosos = [];
 
+    // Caché en memoria para Overpass en la misma sesión
+    let cacheOsmKey = "";
+    let cacheOsmCalles = null;
+
     let tabActual = "faltantes";
 
     // ---------------- AUDIO Y VOZ ----------------
@@ -1066,7 +1070,7 @@
         }
     }
 
-    // ---------------- AUDITORÍA Y AUTOCORRECCIÓN ONLINE (OVERPASS POR GET SIMPLE) ----------------
+    // ---------------- AUDITORÍA ONLINE (OVERPASS + PLAN B OSRM/PHOTON) ----------------
     function normalizarCalleComparacion(texto) {
         let s = String(texto || "")
             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -1148,44 +1152,188 @@
         return { dist: mejorDist, lat: mejorLat, lon: mejorLon };
     }
 
-    async function consultarOverpassConRespaldo(query, btn) {
+    async function intentarOverpass(s, w, n, e, btn) {
+        const bboxKey = `${s},${w},${n},${e}`;
+        if (cacheOsmKey === bboxKey && cacheOsmCalles) {
+            return cacheOsmCalles;
+        }
+
+        const query = `[out:json][timeout:40];way["highway"]["name"](${s},${w},${n},${e});out geom;`;
+        // Nota: overpass.private.coffee suele aceptar incluso con VPN; overpass-api.de es ultra rápido sin VPN
         const endpoints = [
-            "https://overpass-api.de/api/interpreter",
-            "https://overpass.private.coffee/api/interpreter",
-            "https://z.overpass-api.de/api/interpreter",
-            "https://lz4.overpass-api.de/api/interpreter"
+            { url: "https://overpass-api.de/api/interpreter", ms: 16000 },
+            { url: "https://overpass.private.coffee/api/interpreter", ms: 42000 }
         ];
-        const errores = [];
 
         for (let i = 0; i < endpoints.length; i++) {
-            const base = endpoints[i];
-            const host = new URL(base).hostname;
-            if (btn) btn.innerText = `🌐 Conectando (${i + 1}/${endpoints.length})...`;
-
+            const ep = endpoints[i];
+            btn.innerText = `🌐 Intentando mapa (${i + 1}/2)...`;
             const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 22000);
+            const timer = setTimeout(() => ctrl.abort(), ep.ms);
             try {
-                // GET simple sin headers personalizados evita bloqueo CORS preflight (HTTP 406)
-                const url = `${base}?data=${encodeURIComponent(query)}`;
-                const res = await fetch(url, { method: "GET", signal: ctrl.signal });
+                const fullUrl = `${ep.url}?data=${encodeURIComponent(query)}`;
+                const res = await fetch(fullUrl, { method: "GET", signal: ctrl.signal });
                 clearTimeout(timer);
                 if (res.ok) {
                     const json = await res.json();
-                    if (json && Array.isArray(json.elements)) return json;
+                    if (json && Array.isArray(json.elements) && json.elements.length > 0) {
+                        const osmCalles = new Map();
+                        for (const el of json.elements) {
+                            if (!el.tags || !el.tags.name || !Array.isArray(el.geometry) || el.geometry.length < 2) continue;
+                            const nombreOriginal = el.tags.name;
+                            const normName = normalizarCalleComparacion(nombreOriginal);
+                            if (!normName) continue;
+                            if (!osmCalles.has(normName)) {
+                                osmCalles.set(normName, { nombreOriginal, polilineas: [] });
+                            }
+                            osmCalles.get(normName).polilineas.push(el.geometry);
+                        }
+                        cacheOsmKey = bboxKey;
+                        cacheOsmCalles = osmCalles;
+                        return osmCalles;
+                    }
                 }
-                errores.push(`${host}: HTTP ${res.status}`);
-            } catch (e) {
+            } catch (err) {
                 clearTimeout(timer);
-                errores.push(`${host}: ${e.name === "AbortError" ? "Tiempo agotado" : "Error red"}`);
             }
         }
-        throw new Error(`Servidores ocupados (${errores.join(" | ")})`);
+        return null;
+    }
+
+    // Plan B: OSRM /nearest + Photon (funciona siempre incluso con VPN)
+    async function buscarEnPhoton(dirQuery, refLat, refLon) {
+        try {
+            const bias = (refLat !== null && refLon !== null) ? `&lat=${refLat}&lon=${refLon}` : "";
+            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(dirQuery)}&limit=3${bias}`;
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 7000);
+            const res = await fetch(url, { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return Array.isArray(data.features) ? data.features : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async function auditarConPlanBOSRM(btn) {
+        // Agrupar paquetes por dirección para no repetir consultas innecesarias
+        const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+            codigo, texto: ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon
+        }));
+        const grupos = construirGruposSentidoComun(itemsExcel);
+        const listaGrupos = Array.from(grupos.values());
+
+        let detectados = 0;
+        let reparadosSinGps = 0;
+        let erroresRed = 0;
+
+        for (let idx = 0; idx < listaGrupos.length; idx++) {
+            const codigos = listaGrupos[idx];
+            btn.innerText = `🌐 Auditando vía rápida (${idx + 1}/${listaGrupos.length})...`;
+
+            const exRep = mapaExcel.get(codigos[0]);
+            const calleEspNorm = normalizarCalleComparacion(exRep.address.split(",")[0].split("-")[0]);
+
+            // Caso 0,0
+            if (exRep.lat === null || exRep.lon === null) {
+                const dirQ = limpiarDireccionParaRoutin(exRep.address, "", exRep.city || "Santa Bárbara D'Oeste", "");
+                let coord = null;
+                const feats = await buscarEnPhoton(dirQ, null, null);
+                if (feats.length > 0 && feats[0].geometry?.coordinates) {
+                    coord = { lat: feats[0].geometry.coordinates[1], lon: feats[0].geometry.coordinates[0] };
+                } else {
+                    coord = await buscarCoordenadaFaltanteOSM(exRep);
+                }
+                if (coord) {
+                    for (const c of codigos) {
+                        const ex = mapaExcel.get(c);
+                        ex.sugLat = Number(coord.lat.toFixed(6));
+                        ex.sugLon = Number(coord.lon.toFixed(6));
+                        ex.motivoOnline = "Sin GPS (0,0) → Sugerencia online";
+                    }
+                    reparadosSinGps += codigos.length;
+                }
+                continue;
+            }
+
+            // Consultar los 6 segmentos de calle más cercanos vía OSRM
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 7000);
+                const url = `https://router.project-osrm.org/nearest/v1/driving/${exRep.lon},${exRep.lat}?number=6`;
+                const res = await fetch(url, { signal: ctrl.signal });
+                clearTimeout(timer);
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.code === "Ok" && Array.isArray(data.waypoints)) {
+                        const wNamed = data.waypoints.find(w => w.name && w.name.trim());
+                        if (wNamed && calleEspNorm) {
+                            const normCercana = normalizarCalleComparacion(wNamed.name);
+                            const simCercana = similitudBigrams(normCercana, calleEspNorm);
+
+                            // Buscar si la calle esperada aparece entre los otros waypoints cercanos
+                            const wEsperado = data.waypoints.find(w =>
+                                w.name && similitudBigrams(normalizarCalleComparacion(w.name), calleEspNorm) >= 0.78
+                            );
+
+                            if (wNamed.distance <= 22 && simCercana < 0.72) {
+                                if (wEsperado && wEsperado.distance >= 28 && wEsperado.distance <= 260) {
+                                    for (const c of codigos) {
+                                        const ex = mapaExcel.get(c);
+                                        ex.esPinSospechoso = true;
+                                        ex.sugLat = Number(wEsperado.location[1].toFixed(6));
+                                        ex.sugLon = Number(wEsperado.location[0].toFixed(6));
+                                        ex.motivoOnline = `Cayó en ${wNamed.name} (a ${Math.round(wEsperado.distance)}m de ${wEsperado.name})`;
+                                    }
+                                    detectados += codigos.length;
+                                } else if (!wEsperado) {
+                                    // Si ni siquiera apareció entre las 6 calles más cercanas, buscar en Photon
+                                    const dirQ = limpiarDireccionParaRoutin(exRep.address, "", exRep.city || "Santa Bárbara D'Oeste", "");
+                                    const feats = await buscarEnPhoton(dirQ, exRep.lat, exRep.lon);
+                                    const matchF = feats.find(f => {
+                                        const fn = normalizarCalleComparacion(f.properties?.street || f.properties?.name || "");
+                                        return fn && similitudBigrams(fn, calleEspNorm) >= 0.78;
+                                    });
+                                    if (matchF && matchF.geometry?.coordinates) {
+                                        const pLon = matchF.geometry.coordinates[0];
+                                        const pLat = matchF.geometry.coordinates[1];
+                                        const d = distanciaMetros(exRep.lat, exRep.lon, pLat, pLon);
+                                        if (d >= 28 && d <= 450) {
+                                            for (const c of codigos) {
+                                                const ex = mapaExcel.get(c);
+                                                ex.esPinSospechoso = true;
+                                                ex.sugLat = Number(pLat.toFixed(6));
+                                                ex.sugLon = Number(pLon.toFixed(6));
+                                                ex.motivoOnline = `Cayó en ${wNamed.name} (a ~${Math.round(d)}m de calle real)`;
+                                            }
+                                            detectados += codigos.length;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                erroresRed++;
+            }
+
+            if (idx % 3 === 2) await new Promise(r => setTimeout(r, 80));
+        }
+
+        if (erroresRed > listaGrupos.length * 0.7) {
+            throw new Error("No hubo respuesta de OSRM ni Overpass (revisa VPN o conexión).");
+        }
+        return { detectadosParalela: detectados, reparadosSinGps, estimadosCalle: 0, totalCallesTexto: "OSRM+Photon" };
     }
 
     async function auditarCallesOnline() {
         if (mapaExcel.size === 0) return;
         if (!navigator.onLine) {
-            alert("Necesitas conexión a internet para ejecutar la auditoría online de calles.");
+            alert("Necesitas conexión a internet para ejecutar la auditoría online.");
             return;
         }
 
@@ -1200,7 +1348,13 @@
                 .map(ex => ({ lat: ex.lat, lon: ex.lon }));
 
             if (coordsValidas.length === 0) {
-                throw new Error("No hay coordenadas válidas en el Excel para delimitar la zona.");
+                throw new Error("No hay coordenadas válidas en el Excel.");
+            }
+
+            for (const ex of mapaExcel.values()) {
+                ex.sugLat = null;
+                ex.sugLon = null;
+                ex.motivoOnline = "";
             }
 
             const latsOrd = coordsValidas.map(c => c.lat).sort((a, b) => a - b);
@@ -1217,138 +1371,148 @@
                     if (c.lon > maxLon) maxLon = c.lon;
                 }
             }
-            const s = (minLat - 0.005).toFixed(5);
-            const w = (minLon - 0.005).toFixed(5);
-            const n = (maxLat + 0.005).toFixed(5);
-            const e = (maxLon + 0.005).toFixed(5);
+            const s = (minLat - 0.004).toFixed(5);
+            const w = (minLon - 0.004).toFixed(5);
+            const n = (maxLat + 0.004).toFixed(5);
+            const e = (maxLon + 0.004).toFixed(5);
 
-            const query = `[out:json][timeout:20];way["highway"]["name"](${s},${w},${n},${e});out geom;`;
-            const osmData = await consultarOverpassConRespaldo(query, btn);
+            // Intentar primero Overpass (1 sola consulta); si falla/bloquea VPN, usar Plan B (OSRM + Photon)
+            const osmCalles = await intentarOverpass(s, w, n, e, btn);
 
-            btn.innerText = "🔍 Auditando pines contra calles...";
-            const osmCalles = new Map();
+            let resumen;
+            if (osmCalles) {
+                btn.innerText = "🔍 Auditando pines contra calles...";
+                const listaOsmCalles = Array.from(osmCalles.entries());
+                let detectadosParalela = 0;
+                let estimadosCalle = 0;
+                let reparadosSinGps = 0;
 
-            for (const el of osmData.elements) {
-                if (!el.tags || !el.tags.name || !Array.isArray(el.geometry) || el.geometry.length < 2) continue;
-                const nombreOriginal = el.tags.name;
-                const normName = normalizarCalleComparacion(nombreOriginal);
-                if (!normName) continue;
+                for (const [codigo, ex] of mapaExcel.entries()) {
+                    const parsed = parsearDireccionInteligente(ex.address, ex.zip);
+                    const calleEsperadaNorm = normalizarCalleComparacion(ex.address.split(",")[0].split("-")[0]);
 
-                if (!osmCalles.has(normName)) {
-                    osmCalles.set(normName, { nombreOriginal, polilineas: [] });
-                }
-                osmCalles.get(normName).polilineas.push(el.geometry);
-            }
-
-            const listaOsmCalles = Array.from(osmCalles.entries());
-            let detectadosParalela = 0;
-            let estimadosCalle = 0;
-            let reparadosSinGps = 0;
-
-            for (const ex of mapaExcel.values()) {
-                ex.sugLat = null;
-                ex.sugLon = null;
-                ex.motivoOnline = "";
-            }
-
-            for (const [codigo, ex] of mapaExcel.entries()) {
-                const parsed = parsearDireccionInteligente(ex.address, ex.zip);
-                const calleEsperadaNorm = normalizarCalleComparacion(ex.address.split(",")[0].split("-")[0]);
-
-                let polilineasEsperadas = [];
-                let nombreEsperadoOsm = "";
-                if (calleEsperadaNorm) {
-                    for (const [normName, info] of listaOsmCalles) {
-                        if (normName === calleEsperadaNorm || similitudBigrams(normName, calleEsperadaNorm) >= 0.80) {
-                            polilineasEsperadas.push(...info.polilineas);
-                            if (!nombreEsperadoOsm) nombreEsperadoOsm = info.nombreOriginal;
-                        }
-                    }
-                }
-
-                // Caso A: Sin GPS (0,0)
-                if (ex.lat === null || ex.lon === null) {
-                    btn.innerText = "🔧 Buscando sin GPS...";
-                    const coordNom = await buscarCoordenadaFaltanteOSM(ex);
-                    if (coordNom) {
-                        ex.sugLat = Number(coordNom.lat.toFixed(6));
-                        ex.sugLon = Number(coordNom.lon.toFixed(6));
-                        ex.motivoOnline = "Sin GPS (0,0) → Sugerencia OSM";
-                        reparadosSinGps++;
-                    } else if (polilineasEsperadas.length > 0) {
-                        const seg = polilineasEsperadas[Math.floor(polilineasEsperadas.length / 2)];
-                        const pt = seg[Math.floor(seg.length / 2)];
-                        ex.sugLat = Number(pt.lat.toFixed(6));
-                        ex.sugLon = Number(pt.lon.toFixed(6));
-                        ex.motivoOnline = "Sin GPS (0,0) → Centro de calle OSM";
-                        reparadosSinGps++;
-                    }
-                    continue;
-                }
-
-                // Caso B: Pin en calle paralela o transversal
-                if (polilineasEsperadas.length > 0) {
-                    const proyEsperada = puntoMasCercanoEnPolilineas(ex.lat, ex.lon, polilineasEsperadas);
-
-                    let calleMasCercana = "";
-                    let normMasCercana = "";
-                    let distMasCercana = Infinity;
-
-                    for (const [normName, info] of listaOsmCalles) {
-                        const p0 = info.polilineas[0][0];
-                        if (Math.abs(p0.lat - ex.lat) > 0.015 || Math.abs(p0.lon - ex.lon) > 0.015) continue;
-
-                        const res = puntoMasCercanoEnPolilineas(ex.lat, ex.lon, info.polilineas);
-                        if (res.dist < distMasCercana) {
-                            distMasCercana = res.dist;
-                            calleMasCercana = info.nombreOriginal;
-                            normMasCercana = normName;
+                    let polilineasEsperadas = [];
+                    let nombreEsperadoOsm = "";
+                    if (calleEsperadaNorm) {
+                        for (const [normName, info] of listaOsmCalles) {
+                            if (normName === calleEsperadaNorm || similitudBigrams(normName, calleEsperadaNorm) >= 0.80) {
+                                polilineasEsperadas.push(...info.polilineas);
+                                if (!nombreEsperadoOsm) nombreEsperadoOsm = info.nombreOriginal;
+                            }
                         }
                     }
 
-                    const simCercana = similitudBigrams(normMasCercana, calleEsperadaNorm);
-
-                    if (proyEsperada.dist >= 28 && proyEsperada.dist <= 260 && distMasCercana <= 22 && simCercana < 0.72) {
-                        ex.esPinSospechoso = true;
-                        ex.sugLat = Number(proyEsperada.lat.toFixed(6));
-                        ex.sugLon = Number(proyEsperada.lon.toFixed(6));
-                        ex.motivoOnline = `Cayó en ${calleMasCercana} (a ${Math.round(proyEsperada.dist)}m de ${nombreEsperadoOsm})`;
-                        detectadosParalela++;
+                    if (ex.lat === null || ex.lon === null) {
+                        btn.innerText = "🔧 Buscando sin GPS...";
+                        const dirQ = limpiarDireccionParaRoutin(ex.address, "", ex.city || "Santa Bárbara D'Oeste", "");
+                        const feats = await buscarEnPhoton(dirQ, null, null);
+                        if (feats.length > 0 && feats[0].geometry?.coordinates) {
+                            ex.sugLat = Number(feats[0].geometry.coordinates[1].toFixed(6));
+                            ex.sugLon = Number(feats[0].geometry.coordinates[0].toFixed(6));
+                            ex.motivoOnline = "Sin GPS (0,0) → Sugerencia online";
+                            reparadosSinGps++;
+                        } else if (polilineasEsperadas.length > 0) {
+                            const seg = polilineasEsperadas[Math.floor(polilineasEsperadas.length / 2)];
+                            const pt = seg[Math.floor(seg.length / 2)];
+                            ex.sugLat = Number(pt.lat.toFixed(6));
+                            ex.sugLon = Number(pt.lon.toFixed(6));
+                            ex.motivoOnline = "Sin GPS (0,0) → Centro de calle OSM";
+                            reparadosSinGps++;
+                        }
                         continue;
                     }
-                }
 
-                // Caso C: Desvío métrico a lo largo de la calle (ej: Rua Itália, 30)
-                if (ex.esPinSospechoso && parsed.num !== null && !ex.motivoSospecha.includes("impreciso")) {
-                    const paresBuenos = [];
-                    for (const [otroCod, otroEx] of mapaExcel.entries()) {
-                        if (otroCod === codigo || otroEx.esPinSospechoso || otroEx.lat === null) continue;
-                        const pOtro = parsearDireccionInteligente(otroEx.address, otroEx.zip);
-                        if (pOtro.calle === parsed.calle && pOtro.num !== null && Number(pOtro.num) !== Number(parsed.num)) {
-                            paresBuenos.push({ num: Number(pOtro.num), lat: otroEx.lat, lon: otroEx.lon });
+                    if (polilineasEsperadas.length > 0) {
+                        const proyEsperada = puntoMasCercanoEnPolilineas(ex.lat, ex.lon, polilineasEsperadas);
+                        let calleMasCercana = "";
+                        let normMasCercana = "";
+                        let distMasCercana = Infinity;
+
+                        for (const [normName, info] of listaOsmCalles) {
+                            const p0 = info.polilineas[0][0];
+                            if (Math.abs(p0.lat - ex.lat) > 0.015 || Math.abs(p0.lon - ex.lon) > 0.015) continue;
+
+                            const res = puntoMasCercanoEnPolilineas(ex.lat, ex.lon, info.polilineas);
+                            if (res.dist < distMasCercana) {
+                                distMasCercana = res.dist;
+                                calleMasCercana = info.nombreOriginal;
+                                normMasCercana = normName;
+                            }
+                        }
+
+                        const simCercana = similitudBigrams(normMasCercana, calleEsperadaNorm);
+                        if (proyEsperada.dist >= 28 && proyEsperada.dist <= 260 && distMasCercana <= 22 && simCercana < 0.72) {
+                            ex.esPinSospechoso = true;
+                            ex.sugLat = Number(proyEsperada.lat.toFixed(6));
+                            ex.sugLon = Number(proyEsperada.lon.toFixed(6));
+                            ex.motivoOnline = `Cayó en ${calleMasCercana} (a ${Math.round(proyEsperada.dist)}m de ${nombreEsperadoOsm})`;
+                            detectadosParalela++;
+                            continue;
                         }
                     }
 
-                    if (paresBuenos.length >= 2) {
-                        const targetNum = Number(parsed.num);
-                        paresBuenos.sort((a, b) => Math.abs(a.num - targetNum) - Math.abs(b.num - targetNum));
-                        const p1 = paresBuenos[0];
-                        const p2 = paresBuenos.find(x => Math.abs(x.num - p1.num) >= 40) || paresBuenos[1];
-
-                        if (p1.num !== p2.num) {
-                            const factor = (targetNum - p1.num) / (p1.num - p2.num);
-                            let estLat = p1.lat + factor * (p1.lat - p2.lat);
-                            let estLon = p1.lon + factor * (p1.lon - p2.lon);
-
-                            if (polilineasEsperadas.length > 0) {
-                                const snap = puntoMasCercanoEnPolilineas(estLat, estLon, polilineasEsperadas);
-                                estLat = snap.lat;
-                                estLon = snap.lon;
+                    if (ex.esPinSospechoso && parsed.num !== null && !ex.motivoSospecha.includes("impreciso")) {
+                        const paresBuenos = [];
+                        for (const [otroCod, otroEx] of mapaExcel.entries()) {
+                            if (otroCod === codigo || otroEx.esPinSospechoso || otroEx.lat === null) continue;
+                            const pOtro = parsearDireccionInteligente(otroEx.address, otroEx.zip);
+                            if (pOtro.calle === parsed.calle && pOtro.num !== null && Number(pOtro.num) !== Number(parsed.num)) {
+                                paresBuenos.push({ num: Number(pOtro.num), lat: otroEx.lat, lon: otroEx.lon });
                             }
-                            ex.sugLat = Number(estLat.toFixed(6));
-                            ex.sugLon = Number(estLon.toFixed(6));
-                            ex.motivoOnline = `${ex.motivoSospecha} → Estimado métrico listo`;
-                            estimadosCalle++;
+                        }
+
+                        if (paresBuenos.length >= 2) {
+                            const targetNum = Number(parsed.num);
+                            paresBuenos.sort((a, b) => Math.abs(a.num - targetNum) - Math.abs(b.num - targetNum));
+                            const p1 = paresBuenos[0];
+                            const p2 = paresBuenos.find(x => Math.abs(x.num - p1.num) >= 40) || paresBuenos[1];
+
+                            if (p1.num !== p2.num) {
+                                const factor = (targetNum - p1.num) / (p1.num - p2.num);
+                                let estLat = p1.lat + factor * (p1.lat - p2.lat);
+                                let estLon = p1.lon + factor * (p1.lon - p2.lon);
+
+                                if (polilineasEsperadas.length > 0) {
+                                    const snap = puntoMasCercanoEnPolilineas(estLat, estLon, polilineasEsperadas);
+                                    estLat = snap.lat;
+                                    estLon = snap.lon;
+                                }
+                                ex.sugLat = Number(estLat.toFixed(6));
+                                ex.sugLon = Number(estLon.toFixed(6));
+                                ex.motivoOnline = `${ex.motivoSospecha} → Estimado métrico listo`;
+                                estimadosCalle++;
+                            }
+                        }
+                    }
+                }
+                resumen = { detectadosParalela, estimadosCalle, reparadosSinGps, totalCallesTexto: `${osmCalles.size} calles` };
+            } else {
+                resumen = await auditarConPlanBOSRM(btn);
+                // También estimar métricamente los sospechosos de calle (ej: Rua Itália, 30) usando pares buenos del Excel
+                for (const [codigo, ex] of mapaExcel.entries()) {
+                    if (ex.esPinSospechoso && ex.sugLat === null && !ex.motivoSospecha.includes("impreciso")) {
+                        const parsed = parsearDireccionInteligente(ex.address, ex.zip);
+                        if (parsed.num === null) continue;
+                        const paresBuenos = [];
+                        for (const [otroCod, otroEx] of mapaExcel.entries()) {
+                            if (otroCod === codigo || otroEx.esPinSospechoso || otroEx.lat === null) continue;
+                            const pOtro = parsearDireccionInteligente(otroEx.address, otroEx.zip);
+                            if (pOtro.calle === parsed.calle && pOtro.num !== null && Number(pOtro.num) !== Number(parsed.num)) {
+                                paresBuenos.push({ num: Number(pOtro.num), lat: otroEx.lat, lon: otroEx.lon });
+                            }
+                        }
+                        if (paresBuenos.length >= 2) {
+                            const targetNum = Number(parsed.num);
+                            paresBuenos.sort((a, b) => Math.abs(a.num - targetNum) - Math.abs(b.num - targetNum));
+                            const p1 = paresBuenos[0];
+                            const p2 = paresBuenos.find(x => Math.abs(x.num - p1.num) >= 40) || paresBuenos[1];
+                            if (p1.num !== p2.num) {
+                                const factor = (targetNum - p1.num) / (p1.num - p2.num);
+                                ex.sugLat = Number((p1.lat + factor * (p1.lat - p2.lat)).toFixed(6));
+                                ex.sugLon = Number((p1.lon + factor * (p1.lon - p2.lon)).toFixed(6));
+                                ex.motivoOnline = `${ex.motivoSospecha} → Estimado métrico listo`;
+                                resumen.estimadosCalle++;
+                            }
                         }
                     }
                 }
@@ -1363,10 +1527,10 @@
                 document.getElementById("alertaPines").open = true;
             }
 
-            const totalMejoras = detectadosParalela + estimadosCalle + reparadosSinGps;
+            const totalMejoras = resumen.detectadosParalela + resumen.estimadosCalle + resumen.reparadosSinGps;
             estadoEl.innerText = totalMejoras > 0
-                ? `🌐 Auditoría lista (${osmCalles.size} calles): ${detectadosParalela} en calle paralela, ${estimadosCalle} estimado(s), ${reparadosSinGps} sin GPS.`
-                : `🌐 Auditoría lista (${osmCalles.size} calles revisadas): no se detectaron desvíos graves.`;
+                ? `🌐 Auditoría (${resumen.totalCallesTexto}): ${resumen.detectadosParalela} en calle paralela, ${resumen.estimadosCalle} estimado(s), ${resumen.reparadosSinGps} sin GPS.`
+                : `🌐 Auditoría lista (${resumen.totalCallesTexto}): sin desvíos graves a calles paralelas.`;
             estadoEl.style.color = "#4ade80";
         } catch (err) {
             console.error(err);
@@ -1616,7 +1780,6 @@
 
     async function buscarCoordenadaFaltanteOSM(ex) {
         const queryDir = limpiarDireccionParaRoutin(ex.address, "", ex.city || "Santa Bárbara D'Oeste", "");
-        // Sin headers personalizados para evitar CORS preflight
         const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&accept-language=pt-BR&q=${encodeURIComponent(queryDir)}`;
         try {
             const res = await fetch(url);
@@ -2120,6 +2283,8 @@
         mapaAccionPin.clear();
         omitidosEnPdf = [];
         pinesSospechosos = [];
+        cacheOsmKey = "";
+        cacheOsmCalles = null;
 
         localStorage.removeItem(STORAGE_PDF);
         localStorage.removeItem(STORAGE_EXCEL);
