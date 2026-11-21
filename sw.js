@@ -1,4 +1,4 @@
-const CACHE_NAME = "escaner-fiorino-v3";
+const CACHE_NAME = "escaner-fiorino-v4";
 const ASSETS = [
     "./",
     "./index.html",
@@ -29,6 +29,12 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
     if (event.request.method !== "GET") return;
+    const url = event.request.url;
+
+    // Dejar pasar directo las consultas en vivo a mapas/geocoding
+    if (url.includes("overpass") || url.includes("nominatim") || url.includes("private.coffee")) {
+        return;
+    }
 
     event.respondWith(
         fetch(event.request)
