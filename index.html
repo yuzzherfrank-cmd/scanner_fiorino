@@ -832,7 +832,7 @@
         }
     }
 
-    // ---------------- CARGA DE EXCEL SHOPEE ----------------
+    // ---------------- CARGA DE EXCEL SHOPEE (SOLO PINES GRAVES <=3 DEC O 0,0) ----------------
     function validarCoordenada(rawStr) {
         const strLimpia = String(rawStr || "").replace(",", ".").trim();
         const num = parseFloat(strLimpia);
@@ -841,7 +841,8 @@
         }
         const partes = strLimpia.split(".");
         const decimales = partes[1] ? partes[1].replace(/0+$/, "").length : 0;
-        return { val: num, bajaPrecision: decimales <= 4 };
+        // Solo marca como imprecisa si tiene 3 decimales o menos (>= ~111m de margen)
+        return { val: num, bajaPrecision: decimales <= 3 };
     }
 
     async function cargarExcel(e) {
@@ -896,7 +897,7 @@
 
                 let motivoSospecha = "";
                 if (sinGPS) motivoSospecha = "Sin GPS (0,0)";
-                else if (bajaPrec) motivoSospecha = "Pin genérico (pocos decimales)";
+                else if (bajaPrec) motivoSospecha = "Pin muy impreciso (≤3 dec.)";
 
                 mapaExcel.set(tn, {
                     seq,
@@ -1260,7 +1261,6 @@
         const textoOriginalBtn = btn.innerText;
 
         try {
-            // Solo repara 0,0 que NO hayan sido marcados por el usuario para ir sin GPS
             const sinGps = Array.from(mapaExcel.entries()).filter(
                 ([tn, ex]) => (ex.lat === null || ex.lon === null) && !setQuitarGps.has(tn)
             );
@@ -1687,10 +1687,9 @@
             alertaOmision.innerHTML = "";
         }
 
-        // Lista desplegable de pines sospechosos con selección individual + Pin Shopee + Calle limpia
         if (pinesSospechosos.length > 0) {
             document.getElementById("alertaPinesResumen").innerText =
-                `⚠️ ${pinesSospechosos.length} pin(es) sospechoso(s) detectado(s) — Tocar para revisar`;
+                `⚠️ ${pinesSospechosos.length} pin(es) sospechoso(s) grave(s) — Tocar para revisar`;
 
             const toolbar = `
                 <div class="pines-toolbar">
@@ -1706,7 +1705,7 @@
                 const dirSoloCalle = limpiarDireccionParaRoutin(p.address, "", p.city, "");
                 const qCalle = encodeURIComponent(`${dirSoloCalle}, SP, Brasil`);
                 const pinShopeeBtn = (p.lat !== null && p.lon !== null)
-                    ? `<a class="pin-btn-map gps" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}">📍 Pin</a>`
+                    ? `<a class="pin-btn-map gps" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}">📍 Shopee</a>`
                     : "";
                 const checked = setQuitarGps.has(p.codigo) ? "checked" : "";
                 return `
@@ -1720,7 +1719,7 @@
                         </label>
                         <div class="pin-row-actions">
                             ${pinShopeeBtn}
-                            <a class="pin-btn-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qCalle}">🔍 Calle</a>
+                            <a class="pin-btn-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qCalle}">📍 Maps</a>
                         </div>
                     </div>
                 `;
