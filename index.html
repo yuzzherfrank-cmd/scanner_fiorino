@@ -37,7 +37,6 @@
 
         .container { max-width: 460px; margin: 0 auto; }
 
-        /* Cabecera y Progreso */
         .header {
             display: flex;
             justify-content: space-between;
@@ -52,8 +51,8 @@
             color: var(--text);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 7px 10px;
-            font-size: 0.83rem;
+            padding: 7px 9px;
+            font-size: 0.81rem;
             font-weight: 600;
             cursor: pointer;
             flex-shrink: 0;
@@ -131,7 +130,7 @@
         #reader { width: 100%; min-height: 215px; }
         .scanner-controls {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             padding: 8px;
             background: var(--card);
             border-top: 1px solid var(--border);
@@ -319,11 +318,22 @@
             flex-direction: column;
             gap: 6px;
             margin-bottom: 8px;
-            font-size: 0.83rem;
+            font-size: 0.82rem;
         }
         .export-radios label {
             display: flex;
             align-items: center;
+            gap: 7px;
+            cursor: pointer;
+        }
+        .export-check {
+            border-top: 1px solid var(--border);
+            padding-top: 7px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            color: #fde047;
+            display: flex;
+            align-items: flex-start;
             gap: 7px;
             cursor: pointer;
         }
@@ -386,7 +396,52 @@
         }
         .alerta-omision.visible { display: block; }
 
-        /* Modal Lista de Control (scroll táctil perfecto en Android) */
+        .alerta-pines {
+            display: none;
+            margin-top: 8px;
+            border-radius: 8px;
+            background: rgba(180, 83, 9, 0.22);
+            border: 1px solid #f59e0b;
+            color: #fde68a;
+            font-size: 0.81rem;
+            overflow: hidden;
+        }
+        .alerta-pines.visible { display: block; }
+        .alerta-pines summary {
+            padding: 9px 10px;
+            cursor: pointer;
+            font-weight: 700;
+            list-style: none;
+        }
+        .alerta-pines summary::-webkit-details-marker { display: none; }
+        .alerta-pines-body {
+            padding: 8px 10px;
+            border-top: 1px solid rgba(245, 158, 11, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pin-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 6px 8px;
+            border-radius: 6px;
+        }
+        .pin-row a {
+            background: #d97706;
+            color: #fff;
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-weight: 700;
+            font-size: 0.74rem;
+            white-space: nowrap;
+        }
+
+        /* Modal Lista de Control */
         .modal-backdrop {
             display: none;
             position: fixed;
@@ -544,6 +599,7 @@
         <div id="reader"></div>
         <div class="scanner-controls">
             <button id="btnLinterna" class="btn-icon" onclick="toggleLinterna()">🔦 Linterna</button>
+            <button id="btnCamara" class="btn-icon" onclick="toggleCamaraFrontal()">🤳 Selfie</button>
             <button id="btnPausa" class="btn-icon" onclick="togglePausaCamara()">⏸️ Pausar</button>
         </div>
     </div>
@@ -578,6 +634,10 @@
                         <span><strong>Método Agrupado:</strong> 1 parada por dirección en Routin</span>
                     </label>
                 </div>
+                <label class="export-check">
+                    <input type="checkbox" id="chkSinGpsSospechosos">
+                    <span>Quitar GPS a pines sospechosos (para ubicarlos a mano en Routin)</span>
+                </label>
                 <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">
                     ⬇️ Descargar Excel limpio para Routin
                 </button>
@@ -585,6 +645,10 @@
         </div>
         <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
         <div id="alertaOmision" class="alerta-omision"></div>
+        <details id="alertaPines" class="alerta-pines">
+            <summary id="alertaPinesResumen">⚠️ Pines sospechosos</summary>
+            <div id="alertaPinesBody" class="alerta-pines-body"></div>
+        </details>
         <div style="margin-top:10px; display:flex; justify-content:flex-end;">
             <button class="btn-icon peligro" onclick="limpiarTodo()">🗑️ Nuevo día (Limpiar todo)</button>
         </div>
@@ -625,6 +689,7 @@
     let scannerPausadoManual = false;
     let scannerBusy = false;
     let linternaActiva = false;
+    let usarCamaraFrontal = false;
 
     // "voz" | "pitido" | "mudo"
     let modoAudio = "voz";
@@ -636,21 +701,15 @@
     let ultimoCodigoLeido = "";
     let ultimoTiempoLeido = 0;
 
-    // Fuentes de datos separadas (permite subir PDF y Excel en cualquier orden)
-    // codigoBR -> { parada, refShopee, dirPDF, esAgrupado }
     let mapaPdfBase = new Map();
-    // codigoBR -> { seq, stop, address, bairro, city, zip, lat, lon, rawLat, rawLon, esPinSospechoso, pinCorregido }
     let mapaExcel = new Map();
-    // Estados independientes del usuario
     let setEscaneados = new Set();
     let setAtras = new Set();
 
-    // Ruta activa combinada (construida por reconstruirRutaActiva)
-    // codigoBR -> { parada, refShopee, dirPDF, dirCompleta, bairro, lat, lon, grupoId, esPinSospechoso }
     let mapaRuta = new Map();
-    // grupoId -> { count, paradas: [number], codigos: [string] }
     let mapaGrupos = new Map();
     let omitidosEnPdf = [];
+    let pinesSospechosos = []; // [{ codigo, address, city, motivo }]
 
     let tabActual = "faltantes";
 
@@ -761,7 +820,6 @@
     function validarCoordenada(rawStr) {
         const strLimpia = String(rawStr || "").replace(",", ".").trim();
         const num = parseFloat(strLimpia);
-        // Descarta vacío, NaN o "0, 0" (ej: R da Blenda, 136)
         if (!Number.isFinite(num) || num === 0 || Math.abs(num) < 1) {
             return { val: null, bajaPrecision: true };
         }
@@ -819,6 +877,10 @@
                 const sinGPS = latParsed.val === null || lonParsed.val === null;
                 const bajaPrec = latParsed.bajaPrecision || lonParsed.bajaPrecision;
 
+                let motivoSospecha = "";
+                if (sinGPS) motivoSospecha = "Sin GPS (0,0)";
+                else if (bajaPrec) motivoSospecha = "Pin genérico (pocos decimales)";
+
                 mapaExcel.set(tn, {
                     seq,
                     stop,
@@ -829,6 +891,7 @@
                     lat: sinGPS ? null : latParsed.val,
                     lon: sinGPS ? null : lonParsed.val,
                     esPinSospechoso: sinGPS || bajaPrec,
+                    motivoSospecha,
                     pinCorregido: false
                 });
             }
@@ -837,6 +900,7 @@
                 throw new Error("No se encontraron códigos BR válidos en esta planilla.");
             }
 
+            analizarPinesSospechososExcel();
             reconstruirRutaActiva();
             guardarEstado();
             actualizarUIProgreso();
@@ -847,6 +911,96 @@
             estadoEl.style.color = "#f87171";
         } finally {
             e.target.value = "";
+        }
+    }
+
+    // ---------------- DETECTOR DE PINES SOSPECHOSOS (MÉTRICA DE CALLE + SALTO) ----------------
+    function analizarPinesSospechososExcel() {
+        pinesSospechosos = [];
+        if (mapaExcel.size === 0) return;
+
+        // 1. Agrupar por calle + ciudad para comparar numeración métrica vs metros GPS
+        const porCalle = new Map();
+        for (const [codigo, ex] of mapaExcel.entries()) {
+            const p = parsearDireccionInteligente(ex.address, ex.zip);
+            if (!p.calle || p.num === null || ex.lat === null || ex.lon === null) continue;
+            const key = `${p.calle}|${(ex.city || "").toLowerCase()}`;
+            if (!porCalle.has(key)) porCalle.set(key, []);
+            porCalle.get(key).push({ codigo, ex, num: Number(p.num) });
+        }
+
+        const fallosPorCodigo = new Map();
+        const totalCompPorCodigo = new Map();
+
+        for (const lista of porCalle.values()) {
+            if (lista.length < 2) continue;
+
+            for (let i = 0; i < lista.length; i++) {
+                for (let j = i + 1; j < lista.length; j++) {
+                    const A = lista[i], B = lista[j];
+                    const diffNum = Math.abs(A.num - B.num);
+                    if (diffNum < 60) continue;
+
+                    const dist = distanciaMetros(A.ex.lat, A.ex.lon, B.ex.lat, B.ex.lon);
+                    if (dist > 6000) continue; // Distintas secciones/ciudades
+
+                    totalCompPorCodigo.set(A.codigo, (totalCompPorCodigo.get(A.codigo) || 0) + 1);
+                    totalCompPorCodigo.set(B.codigo, (totalCompPorCodigo.get(B.codigo) || 0) + 1);
+
+                    const discrepancia = Math.abs(dist - diffNum);
+                    // Detecta pines muy corridos (ej: Rua Itália, 30 vs 365 = 148m en vez de ~335m)
+                    if (discrepancia >= 120 && (dist < diffNum * 0.55 || dist > diffNum * 1.65 + 50)) {
+                        fallosPorCodigo.set(A.codigo, (fallosPorCodigo.get(A.codigo) || 0) + 1);
+                        fallosPorCodigo.set(B.codigo, (fallosPorCodigo.get(B.codigo) || 0) + 1);
+                    }
+                }
+            }
+        }
+
+        // Si hay 3+ paquetes en la calle y solo 1 falla contra todos (ej: #30 vs #365,#545,#612,#889), marcamos al culpable
+        for (const lista of porCalle.values()) {
+            if (lista.length < 2) continue;
+            const conFallos = lista.filter(x => (fallosPorCodigo.get(x.codigo) || 0) > 0);
+            if (conFallos.length === 0) continue;
+
+            if (lista.length >= 3) {
+                // Ordenar por proporción de fallos
+                let maxFallo = 0;
+                for (const x of conFallos) {
+                    const f = fallosPorCodigo.get(x.codigo) || 0;
+                    if (f > maxFallo) maxFallo = f;
+                }
+                for (const x of conFallos) {
+                    const f = fallosPorCodigo.get(x.codigo) || 0;
+                    if (f === maxFallo && f >= Math.ceil((lista.length - 1) * 0.5)) {
+                        x.ex.esPinSospechoso = true;
+                        x.ex.motivoSospecha = x.ex.motivoSospecha || "Pin fuera de línea en la calle";
+                    } else if (f === 1 && maxFallo >= 2) {
+                        // Era víctima de 1 solo paquete malo en la calle
+                        continue;
+                    } else if (f > 0 && maxFallo === 1) {
+                        x.ex.esPinSospechoso = true;
+                        x.ex.motivoSospecha = x.ex.motivoSospecha || "Desvío métrico en calle";
+                    }
+                }
+            } else {
+                // Solo 2 paquetes en la calle y chocan fuerte: marcamos ambos
+                for (const x of conFallos) {
+                    x.ex.esPinSospechoso = true;
+                    x.ex.motivoSospecha = x.ex.motivoSospecha || "Desvío métrico en calle";
+                }
+            }
+        }
+
+        for (const [codigo, ex] of mapaExcel.entries()) {
+            if (ex.esPinSospechoso) {
+                pinesSospechosos.push({
+                    codigo,
+                    address: ex.address,
+                    city: ex.city || "Santa Bárbara D'Oeste",
+                    motivo: ex.motivoSospecha || "Pin sospechoso"
+                });
+            }
         }
     }
 
@@ -868,13 +1022,12 @@
         let num = null;
         if (partes.length >= 2) {
             if (/^s\s*\/?\s*n\b/i.test(segNum)) {
-                num = null; // S/N explícito: no buscar número en Bloco/Apto
+                num = null;
             } else {
                 const mSeg = segNum.match(/^\s*(\d+)\b/);
                 if (mSeg) num = mSeg[1];
             }
         } else {
-            // Sin coma: buscar número solo si no viene precedido de bloco/apto
             const sinComp = calleRaw.split(/\b(?:bloco|blo|bl|apto|ap|casa|sala|cond)\b/i)[0];
             const mEsp = sinComp.match(/^(.+?)\s+(\d+)\b/);
             if (mEsp) {
@@ -883,7 +1036,6 @@
             }
         }
 
-        // Limpiar "Bairro..." pegado dentro de la calle (ej: "...Coelho Bairro laudisse")
         const calleSinBairro = calleRaw
             .replace(/\s+bairro\s+[a-z0-9\s]+$/i, "")
             .split("-")[0];
@@ -939,9 +1091,7 @@
         return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    // Agrupador genérico reutilizable (sirve tanto para Excel antes de Routin como para mapaRuta)
     function construirGruposSentidoComun(listaItems) {
-        // listaItems: [{ codigo, texto, zip, lat, lon }]
         const n = listaItems.length;
         const parsedList = listaItems.map(it => parsearDireccionInteligente(it.texto, it.zip));
         const padre = Array.from({ length: n }, (_, i) => i);
@@ -956,7 +1106,6 @@
                 const A = listaItems[i], B = listaItems[j];
                 const pA = parsedList[i], pB = parsedList[j];
 
-                // Regla de oro: números explícitos distintos nunca se mezclan (195 Rubi vs 200 Turquesa)
                 if (pA.num !== null && pB.num !== null && pA.num !== pB.num) continue;
 
                 const sim = similitudBigrams(pA.calle, pB.calle);
@@ -969,14 +1118,12 @@
                     if (sim >= 0.72 || dist <= 45) {
                         sonMismoLugar = true;
                     } else if (mismoCep) {
-                        // Regla CEP + Número blindada (resuelve Jacanã: Rua Dois 50 vs Concilia 50)
                         if (dist <= 80) sonMismoLugar = true;
                         else if (dist <= 350 && (pA.esCalleGenerica || pB.esCalleGenerica || (pA.esCondominio && pB.esCondominio))) {
                             sonMismoLugar = true;
                         }
                     }
                 } else if (pA.num === null && pB.num === null) {
-                    // Ej: S/N o sin número
                     if (sim >= 0.85 && (dist <= 80 || dist === Infinity)) sonMismoLugar = true;
                     else if (dist <= 15) sonMismoLugar = true;
                 } else {
@@ -998,7 +1145,6 @@
         return grupos;
     }
 
-    // Elige la coordenada de consenso de un grupo (evita pines solitarios corridos como el de la escuela)
     function elegirMejorCoordenadaGrupo(codigos) {
         const candidatos = codigos
             .map(c => ({ codigo: c, ex: mapaExcel.get(c) }))
@@ -1061,9 +1207,7 @@
             if (Array.isArray(data) && data.length > 0) {
                 const lat = parseFloat(data[0].lat);
                 const lon = parseFloat(data[0].lon);
-                if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                    return { lat, lon };
-                }
+                if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
             }
         } catch (e) {}
         return null;
@@ -1075,17 +1219,17 @@
         const btn = document.getElementById("btnExportarLimpio");
         const estadoEl = document.getElementById("estadoCarga");
         const metodo = document.querySelector('input[name="metodoExport"]:checked')?.value || "clasico";
+        const quitarGpsSospechosos = document.getElementById("chkSinGpsSospechosos").checked;
 
         btn.disabled = true;
         const textoOriginalBtn = btn.innerText;
 
         try {
-            // 1. Intentar reparar coordenadas 0,0 o vacías (máximo 8 consultas rápidas)
             const sinGps = Array.from(mapaExcel.entries()).filter(([, ex]) => ex.lat === null || ex.lon === null);
             let reparados = 0;
             let siguenSinGps = [];
 
-            if (sinGps.length > 0 && navigator.onLine && sinGps.length <= 8) {
+            if (!quitarGpsSospechosos && sinGps.length > 0 && navigator.onLine && sinGps.length <= 8) {
                 for (let i = 0; i < sinGps.length; i++) {
                     const [tn, ex] = sinGps[i];
                     btn.innerText = `⏳ Buscando GPS faltante (${i + 1}/${sinGps.length})...`;
@@ -1094,6 +1238,7 @@
                         ex.lat = coord.lat;
                         ex.lon = coord.lon;
                         ex.esPinSospechoso = true;
+                        ex.motivoSospecha = "Reparado por OSM (verificar)";
                         ex.pinCorregido = true;
                         reparados++;
                     } else {
@@ -1101,12 +1246,12 @@
                     }
                     if (i < sinGps.length - 1) await new Promise(r => setTimeout(r, 1050));
                 }
+                analizarPinesSospechososExcel();
                 guardarEstado();
             } else if (sinGps.length > 0) {
                 siguenSinGps = sinGps.map(([tn, ex]) => `${tn} (${ex.address})`);
             }
 
-            // 2. Agrupar usando Sentido Común antes de exportar
             btn.innerText = "⏳ Generando Excel limpio...";
             const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
                 codigo,
@@ -1126,8 +1271,10 @@
 
                 if (metodo === "agrupado") {
                     const ex = mapaExcel.get(maestro);
-                    const tagPin = (bestLat === null || ex.esPinSospechoso) ? "[⚠️PIN?] " : "";
+                    const esSospechoso = bestLat === null || ex.esPinSospechoso;
+                    const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                     const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+                    const omitirGps = quitarGpsSospechosos && esSospechoso;
 
                     filasLimpias.push({
                         "Nombre": `${tagMulti}${tagPin}${ex.address}`,
@@ -1136,16 +1283,18 @@
                         "Cidade": ex.city,
                         "CEP": ex.zip,
                         "SPX_TN": maestro,
-                        "Latitude": bestLat !== null ? bestLat : "",
-                        "Longitude": bestLon !== null ? bestLon : ""
+                        "Latitude": (!omitirGps && bestLat !== null) ? bestLat : "",
+                        "Longitude": (!omitirGps && bestLon !== null) ? bestLon : ""
                     });
                 } else {
                     for (const tn of codigos) {
                         const ex = mapaExcel.get(tn);
                         const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
                         const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
-                        const tagPin = (bestLat === null || ex.esPinSospechoso) ? "[⚠️PIN?] " : "";
+                        const esSospechoso = bestLat === null || ex.esPinSospechoso;
+                        const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                         const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+                        const omitirGps = quitarGpsSospechosos && esSospechoso;
 
                         filasLimpias.push({
                             "Nombre": `${tagMulti}${tagPin}${prefijoSeq}${ex.address}`,
@@ -1154,8 +1303,8 @@
                             "Cidade": ex.city,
                             "CEP": ex.zip,
                             "SPX_TN": tn,
-                            "Latitude": bestLat !== null ? bestLat : "",
-                            "Longitude": bestLon !== null ? bestLon : ""
+                            "Latitude": (!omitirGps && bestLat !== null) ? bestLat : "",
+                            "Longitude": (!omitirGps && bestLon !== null) ? bestLon : ""
                         });
                     }
                 }
@@ -1184,6 +1333,7 @@
             if (siguenSinGps.length > 0) msgExtra += ` ⚠️ ${siguenSinGps.length} sin GPS: ${siguenSinGps[0]}`;
             estadoEl.innerText = msgExtra;
             estadoEl.style.color = siguenSinGps.length > 0 ? "#fde047" : "#4ade80";
+            actualizarEstadoCargaUI();
         } finally {
             btn.disabled = false;
             btn.innerText = textoOriginalBtn;
@@ -1262,8 +1412,6 @@
                 let detalle = matchNum ? matchNum[2] : textoParada;
 
                 const esAgrupado = /\[📦x\d+\]/.test(detalle);
-
-                // Quitar etiquetas propias [📦x9], [⚠️PIN?] si vienen en el PDF
                 detalle = detalle.replace(/^(?:\[[^\]]+\]\s*)+/, "").trim();
 
                 let refShopee = "";
@@ -1302,7 +1450,6 @@
 
         if (mapaPdfBase.size === 0) return;
 
-        // 1. Cargar paradas presentes en el PDF
         for (const [codigo, pdfInfo] of mapaPdfBase.entries()) {
             const ex = mapaExcel.get(codigo);
             mapaRuta.set(codigo, {
@@ -1315,11 +1462,11 @@
                 lon: ex ? ex.lon : null,
                 zip: ex ? (ex.zip || "") : "",
                 esPinSospechoso: ex ? ex.esPinSospechoso : false,
+                motivoSospecha: ex ? (ex.motivoSospecha || "") : "",
                 grupoId: ""
             });
         }
 
-        // 2. Si existe Excel cargado, expandir paradas agrupadas y auditar omisiones
         if (mapaExcel.size > 0) {
             const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
                 codigo,
@@ -1330,7 +1477,6 @@
             }));
             const gruposExcel = construirGruposSentidoComun(itemsExcel);
 
-            // Para cada grupo del Excel: si al menos 1 código está en el PDF, heredan esa parada los demás del grupo
             for (const codigosGrupo of gruposExcel.values()) {
                 let codigoEnPdf = codigosGrupo.find(c => mapaPdfBase.has(c));
                 if (codigoEnPdf) {
@@ -1348,6 +1494,7 @@
                                 lon: ex.lon,
                                 zip: ex.zip || "",
                                 esPinSospechoso: ex.esPinSospechoso,
+                                motivoSospecha: ex.motivoSospecha || "",
                                 grupoId: ""
                             });
                         }
@@ -1355,7 +1502,6 @@
                 }
             }
 
-            // Auditar si algún paquete del Excel quedó completamente fuera del PDF
             for (const [cod, ex] of mapaExcel.entries()) {
                 if (!mapaRuta.has(cod)) {
                     omitidosEnPdf.push({ codigo: cod, address: ex.address });
@@ -1363,7 +1509,6 @@
             }
         }
 
-        // 3. Construir grupos finales sobre mapaRuta
         const itemsRuta = Array.from(mapaRuta.entries()).map(([codigo, d]) => ({
             codigo,
             texto: d.dirCompleta,
@@ -1398,7 +1543,7 @@
     function detectarAlertas(texto) {
         const alertas = [];
         const t = texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda|empresa|deposito|oficina)\b/.test(t)) {
+        if (/\b(comercio|comercial|horario|loja|padaria|salao|lanchonete|escola|mercado|seg a sex|segunda|empresa|deposito|oficina|imobiliaria)\b/.test(t)) {
             alertas.push({ texto: "🏢 COMERCIO / HORARIO", tipo: "" });
         }
         if (/\b(condominio|cond\.|conde\.|bloco|bl\s*\d|apto|apartamento|portaria)\b/.test(t)) {
@@ -1428,7 +1573,10 @@
             if (rawPdf) mapaPdfBase = new Map(JSON.parse(rawPdf));
 
             const rawEx = localStorage.getItem(STORAGE_EXCEL);
-            if (rawEx) mapaExcel = new Map(JSON.parse(rawEx));
+            if (rawEx) {
+                mapaExcel = new Map(JSON.parse(rawEx));
+                analizarPinesSospechososExcel();
+            }
 
             const rawScan = localStorage.getItem(STORAGE_SCAN);
             if (rawScan) setEscaneados = new Set(JSON.parse(rawScan));
@@ -1453,6 +1601,7 @@
         const estadoEl = document.getElementById("estadoCarga");
         const exportBox = document.getElementById("exportBox");
         const alertaOmision = document.getElementById("alertaOmision");
+        const alertaPines = document.getElementById("alertaPines");
 
         exportBox.classList.toggle("visible", mapaExcel.size > 0);
 
@@ -1461,6 +1610,7 @@
             estadoEl.style.color = "#9ca3af";
             alertaOmision.classList.remove("visible");
             alertaOmision.innerHTML = "";
+            alertaPines.classList.remove("visible");
             return;
         }
 
@@ -1479,7 +1629,6 @@
         estadoEl.innerText = partes.join(" • ");
         estadoEl.style.color = "#4ade80";
 
-        // Alertas de auditoría Excel vs PDF
         const hayAgrupadoEnPdf = Array.from(mapaPdfBase.values()).some(x => x.esAgrupado);
         if (hayAgrupadoEnPdf && mapaExcel.size === 0) {
             alertaOmision.innerHTML = `⚠️ <strong>PDF Agrupado detectado:</strong> sube también el Excel original de Shopee para enlazar todos los códigos BR de cada condominio.`;
@@ -1492,6 +1641,27 @@
         } else {
             alertaOmision.classList.remove("visible");
             alertaOmision.innerHTML = "";
+        }
+
+        // Mostrar lista desplegable de pines sospechosos detectados
+        if (pinesSospechosos.length > 0) {
+            document.getElementById("alertaPinesResumen").innerText =
+                `⚠️ ${pinesSospechosos.length} pin(es) sospechoso(s) detectado(s) — Tocar para revisar`;
+            document.getElementById("alertaPinesBody").innerHTML = pinesSospechosos.map(p => {
+                const qMaps = encodeURIComponent(`${p.address}, ${p.city}, SP, Brasil`);
+                return `
+                    <div class="pin-row">
+                        <div style="min-width:0; word-break:break-word;">
+                            <strong>${esc(p.address)}</strong>
+                            <div style="font-size:0.74rem; color:#fcd34d;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
+                        </div>
+                        <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qMaps}">🗺️ Maps</a>
+                    </div>
+                `;
+            }).join("");
+            alertaPines.classList.add("visible");
+        } else {
+            alertaPines.classList.remove("visible");
         }
     }
 
@@ -1506,6 +1676,7 @@
         setEscaneados.clear();
         setAtras.clear();
         omitidosEnPdf = [];
+        pinesSospechosos = [];
 
         localStorage.removeItem(STORAGE_PDF);
         localStorage.removeItem(STORAGE_EXCEL);
@@ -1564,13 +1735,11 @@
             ultimoTiempoLeido = ahora;
         }
 
-        // ---- MODO VA ATRÁS (Funciona incluso sin Excel ni PDF cargados) ----
         if (modoEscaneo === "atras") {
             procesarLecturaModoAtras(codigoTrim);
             return;
         }
 
-        // ---- MODO SECUENCIA NORMAL ----
         const caja = document.getElementById("resultado");
 
         if (mapaRuta.size === 0) {
@@ -1625,7 +1794,6 @@
     function procesarLecturaModoAtras(codigoTrim) {
         const caja = document.getElementById("resultado");
 
-        // Resolver código real si ya está en ruta o Excel
         const enRuta = buscarCodigoEnMapa(codigoTrim, mapaRuta);
         const enExcel = !enRuta ? buscarCodigoEnMapa(codigoTrim, mapaExcel) : null;
         const mSub = codigoTrim.match(/\b(BR[0-9A-Z]{13})\b/);
@@ -1702,11 +1870,11 @@
         }
 
         if (datos.esPinSospechoso) {
-            alertas.push({ texto: "📍 PIN DUDOSO", tipo: "pin" });
+            alertas.push({ texto: `📍 ${datos.motivoSospecha || "PIN DUDOSO"}`, tipo: "pin" });
         }
 
         const alertasHtml = alertas.length > 0
-            ? `<div class="alertas-row">${alertas.map(a => `<span class="alerta-pill ${a.tipo}">${a.texto}</span>`).join("")}</div>`
+            ? `<div class="alertas-row">${alertas.map(a => `<span class="alerta-pill ${a.tipo}">${esc(a.texto)}</span>`).join("")}</div>`
             : "";
 
         const avisoMismoApto = mismosApto > 0
@@ -1913,7 +2081,6 @@
         const cont = document.getElementById("listaModalContenido");
         const filtro = document.getElementById("filtroModal").value.trim().toUpperCase();
 
-        // Pestaña Atrás (muestra incluso códigos escaneados en distribuidor antes de subir archivos)
         if (tabActual === "atras") {
             const listaAtras = Array.from(setAtras).map(codigo => {
                 const d = mapaRuta.get(codigo);
@@ -1945,7 +2112,6 @@
             return;
         }
 
-        // Pestaña Multibulto agrupada
         if (tabActual === "multi") {
             const grupos = [];
             for (const [gId, grp] of mapaGrupos.entries()) {
@@ -2009,7 +2175,6 @@
             return;
         }
 
-        // Pestañas Faltantes / Cargados
         const items = Array.from(mapaRuta.entries())
             .map(([codigo, datos]) => ({ codigo, ...datos, escaneado: setEscaneados.has(codigo) }))
             .sort((a, b) => a.parada - b.parada)
@@ -2049,7 +2214,7 @@
         }).join("");
     }
 
-    // ---------------- CÁMARA Y LINTERNA ----------------
+    // ---------------- CÁMARA, SELFIE Y LINTERNA ----------------
     async function iniciarEscaner() {
         if (isScannerRunning || scannerBusy || scannerPausadoManual) return;
         scannerBusy = true;
@@ -2068,7 +2233,7 @@
             }
 
             await html5QrCode.start(
-                { facingMode: "environment" },
+                { facingMode: usarCamaraFrontal ? "user" : "environment" },
                 {
                     fps: 12,
                     qrbox: (w, h) => {
@@ -2104,6 +2269,23 @@
         }
     }
 
+    async function toggleCamaraFrontal() {
+        if (scannerBusy) return;
+        const estabaCorriendo = isScannerRunning;
+        if (estabaCorriendo) {
+            await detenerEscaner();
+            await new Promise(r => setTimeout(r, 150));
+        }
+        usarCamaraFrontal = !usarCamaraFrontal;
+        const btn = document.getElementById("btnCamara");
+        btn.classList.toggle("activo", usarCamaraFrontal);
+        btn.innerText = usarCamaraFrontal ? "📷 Trasera" : "🤳 Selfie";
+
+        if (estabaCorriendo && !scannerPausadoManual) {
+            await iniciarEscaner();
+        }
+    }
+
     async function togglePausaCamara() {
         const btn = document.getElementById("btnPausa");
         if (scannerPausadoManual) {
@@ -2120,6 +2302,10 @@
     }
 
     async function toggleLinterna() {
+        if (usarCamaraFrontal) {
+            alert("La cámara frontal (selfie) no tiene linterna.");
+            return;
+        }
         if (!isScannerRunning || !html5QrCode) return;
         const nuevoEstado = !linternaActiva;
         try {
