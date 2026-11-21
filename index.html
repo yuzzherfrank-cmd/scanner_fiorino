@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -127,7 +128,6 @@
             transition: border-color 0.2s ease;
         }
         .scanner-wrap.modo-atras-borde { border-color: #a78bfa; }
-        /* Efecto espejo visual en cámara selfie sin afectar decodificación */
         #scannerWrap.modo-selfie #reader video {
             transform: scaleX(-1) !important;
         }
@@ -299,7 +299,7 @@
         .file-group { margin-bottom: 10px; }
         .file-group:last-of-type { margin-bottom: 0; }
 
-        input[type="text"], input[type="file"] {
+        input[type="text"], input[type="file"], select {
             width: 100%;
             background: var(--card-2);
             color: var(--text);
@@ -335,8 +335,14 @@
             color: #fde047;
             margin-bottom: 8px;
             display: none;
+            line-height: 1.35;
         }
         .resumen-sin-gps.visible { display: block; }
+        .export-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
         .btn-export {
             width: 100%;
             background: #1d4ed8;
@@ -348,7 +354,18 @@
             font-weight: 700;
             cursor: pointer;
         }
-        .btn-export:disabled { opacity: 0.6; cursor: wait; }
+        .btn-auditar {
+            width: 100%;
+            background: #0f766e;
+            color: #fff;
+            border: 1px solid #14b8a6;
+            border-radius: 8px;
+            padding: 9px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-export:disabled, .btn-auditar:disabled { opacity: 0.6; cursor: wait; }
 
         .busqueda-resultados {
             margin-top: 8px;
@@ -419,25 +436,32 @@
             border-top: 1px solid rgba(245, 158, 11, 0.4);
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
         .pines-toolbar {
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
             gap: 6px;
-            font-size: 0.76rem;
-            padding-bottom: 4px;
+            font-size: 0.75rem;
+            padding-bottom: 6px;
             border-bottom: 1px solid rgba(245, 158, 11, 0.25);
         }
         .pin-row {
             display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.28);
+            padding: 8px;
+            border-radius: 7px;
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .pin-row-top {
+            display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             gap: 8px;
-            background: rgba(0, 0, 0, 0.25);
-            padding: 7px 8px;
-            border-radius: 6px;
         }
         .pin-row-actions {
             display: flex;
@@ -457,6 +481,15 @@
             white-space: nowrap;
         }
         .pin-btn-map.gps { background: #1d4ed8; }
+        .pin-btn-map.nuevo { background: #15803d; }
+        .pin-select {
+            padding: 6px 8px;
+            font-size: 0.78rem;
+            border-radius: 6px;
+            background: #111827;
+            border: 1px solid #4b5563;
+            color: #f3f4f6;
+        }
 
         /* Modal Lista de Control */
         .modal-backdrop {
@@ -651,10 +684,15 @@
                         <span><strong>Método Agrupado:</strong> 1 parada por dirección en Routin</span>
                     </label>
                 </div>
-                <div id="resumenQuitarGps" class="resumen-sin-gps"></div>
-                <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">
-                    ⬇️ Descargar Excel limpio para Routin
-                </button>
+                <div id="resumenAccionesPin" class="resumen-sin-gps"></div>
+                <div class="export-actions">
+                    <button id="btnAuditarOnline" class="btn-auditar" onclick="auditarCallesOnline()">
+                        🌐 Auditar y sugerir correcciones (Online)
+                    </button>
+                    <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">
+                        ⬇️ Descargar Excel limpio para Routin
+                    </button>
+                </div>
             </div>
         </div>
         <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
@@ -692,11 +730,11 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     // ---------------- ESTADO GLOBAL PERSISTENTE ----------------
-    const STORAGE_PDF = "escaner_fiorino_pdf_v3";
-    const STORAGE_EXCEL = "escaner_fiorino_excel_v3";
-    const STORAGE_SCAN = "escaner_fiorino_scan_v3";
-    const STORAGE_ATRAS = "escaner_fiorino_atras_v3";
-    const STORAGE_QUITAR_GPS = "escaner_fiorino_quitargps_v3";
+    const STORAGE_PDF = "escaner_fiorino_pdf_v4";
+    const STORAGE_EXCEL = "escaner_fiorino_excel_v4";
+    const STORAGE_SCAN = "escaner_fiorino_scan_v4";
+    const STORAGE_ATRAS = "escaner_fiorino_atras_v4";
+    const STORAGE_ACCION_PIN = "escaner_fiorino_accionpin_v4";
     const COOLDOWN_MS = 2500;
 
     let html5QrCode = null;
@@ -717,15 +755,17 @@
     let ultimoTiempoLeido = 0;
 
     let mapaPdfBase = new Map();
+    // codigoBR -> { seq, stop, address, bairro, city, zip, lat, lon, sugLat, sugLon, esPinSospechoso, motivoSospecha, motivoOnline }
     let mapaExcel = new Map();
     let setEscaneados = new Set();
     let setAtras = new Set();
-    let setQuitarGps = new Set();
+    // codigoBR -> "original" | "corregido" | "singps"
+    let mapaAccionPin = new Map();
 
     let mapaRuta = new Map();
     let mapaGrupos = new Map();
     let omitidosEnPdf = [];
-    let pinesSospechosos = []; // [{ codigo, address, city, lat, lon, motivo }]
+    let pinesSospechosos = [];
 
     let tabActual = "faltantes";
 
@@ -832,7 +872,16 @@
         }
     }
 
-    // ---------------- CARGA DE EXCEL SHOPEE (SOLO PINES GRAVES <=3 DEC O 0,0) ----------------
+    function obtenerCoordActivaExcel(codigo, ex) {
+        const accion = mapaAccionPin.get(codigo) || "original";
+        if (accion === "singps") return { lat: null, lon: null };
+        if (accion === "corregido" && ex.sugLat !== null && ex.sugLon !== null) {
+            return { lat: ex.sugLat, lon: ex.sugLon };
+        }
+        return { lat: ex.lat, lon: ex.lon };
+    }
+
+    // ---------------- CARGA DE EXCEL SHOPEE ----------------
     function validarCoordenada(rawStr) {
         const strLimpia = String(rawStr || "").replace(",", ".").trim();
         const num = parseFloat(strLimpia);
@@ -841,7 +890,6 @@
         }
         const partes = strLimpia.split(".");
         const decimales = partes[1] ? partes[1].replace(/0+$/, "").length : 0;
-        // Solo marca como imprecisa si tiene 3 decimales o menos (>= ~111m de margen)
         return { val: num, bajaPrecision: decimales <= 3 };
     }
 
@@ -870,7 +918,7 @@
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
             mapaExcel.clear();
-            setQuitarGps.clear();
+            mapaAccionPin.clear();
 
             for (const row of rows) {
                 let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || row["Código"] || "").trim().toUpperCase();
@@ -908,9 +956,11 @@
                     zip,
                     lat: sinGPS ? null : latParsed.val,
                     lon: sinGPS ? null : lonParsed.val,
+                    sugLat: null,
+                    sugLon: null,
                     esPinSospechoso: sinGPS || bajaPrec,
                     motivoSospecha,
-                    pinCorregido: false
+                    motivoOnline: ""
                 });
             }
 
@@ -918,7 +968,7 @@
                 throw new Error("No se encontraron códigos BR válidos en esta planilla.");
             }
 
-            analizarPinesSospechososExcel();
+            analizarPinesSospechososOffline();
             reconstruirRutaActiva();
             guardarEstado();
             actualizarUIProgreso();
@@ -932,9 +982,8 @@
         }
     }
 
-    // ---------------- DETECTOR DE PINES SOSPECHOSOS ----------------
-    function analizarPinesSospechososExcel() {
-        pinesSospechosos = [];
+    // ---------------- DETECTOR OFFLINE DE PINES SOSPECHOSOS ----------------
+    function analizarPinesSospechososOffline() {
         if (mapaExcel.size === 0) return;
 
         const porCalle = new Map();
@@ -950,7 +999,6 @@
 
         for (const lista of porCalle.values()) {
             if (lista.length < 2) continue;
-
             for (let i = 0; i < lista.length; i++) {
                 for (let j = i + 1; j < lista.length; j++) {
                     const A = lista[i], B = lista[j];
@@ -1000,40 +1048,381 @@
             }
         }
 
+        recompilarListaSospechosos();
+    }
+
+    function recompilarListaSospechosos() {
+        pinesSospechosos = [];
         for (const [codigo, ex] of mapaExcel.entries()) {
-            if (ex.esPinSospechoso) {
+            if (ex.esPinSospechoso || ex.motivoOnline) {
                 pinesSospechosos.push({
                     codigo,
                     address: ex.address,
                     city: ex.city || "Santa Bárbara D'Oeste",
                     lat: ex.lat,
                     lon: ex.lon,
-                    motivo: ex.motivoSospecha || "Pin sospechoso"
+                    sugLat: ex.sugLat,
+                    sugLon: ex.sugLon,
+                    motivo: ex.motivoOnline || ex.motivoSospecha || "Pin sospechoso"
                 });
             }
         }
     }
 
-    function toggleQuitarGps(codigo, marcado) {
-        if (marcado) setQuitarGps.add(codigo);
-        else setQuitarGps.delete(codigo);
-        guardarEstado();
-        actualizarResumenQuitarGps();
+    // ---------------- AUDITORÍA Y AUTOCORRECCIÓN ONLINE (OVERPASS + GEOMETRÍA) ----------------
+    function normalizarCalleComparacion(texto) {
+        let s = String(texto || "")
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase();
+
+        // Expandir abreviaturas brasileñas comunes para empatar Shopee con OpenStreetMap
+        s = s
+            .replace(/\br\.?\s+/g, "rua ")
+            .replace(/\bav\.?\s+/g, "avenida ")
+            .replace(/\btv\.?\s+/g, "travessa ")
+            .replace(/\bal\.?\s+/g, "alameda ")
+            .replace(/\best\.?\s+/g, "estrada ")
+            .replace(/\brod\.?\s+/g, "rodovia ")
+            .replace(/\bpca\.?\s+/g, "praca ")
+            .replace(/\bdr\.?\s+/g, "doutor ")
+            .replace(/\bdra\.?\s+/g, "doutora ")
+            .replace(/\bprofa?\.?\s+/g, "professor ")
+            .replace(/\bprofessora\b/g, "professor")
+            .replace(/\bver\.?\s+/g, "vereador ")
+            .replace(/\bpe\.?\s+/g, "padre ")
+            .replace(/\bpres\.?\s+/g, "presidente ")
+            .replace(/\bcel\.?\s+/g, "coronel ")
+            .replace(/\bcomend\.?\s+/g, "comendador ")
+            .replace(/\bgov\.?\s+/g, "governador ")
+            .replace(/\bdep\.?\s+/g, "deputado ")
+            .replace(/\bsta\.?\s+/g, "santa ")
+            .replace(/\bsto\.?\s+/g, "santo ")
+            .replace(/\bn\.?\s*sra\.?\s+/g, "nossa senhora ")
+            .replace(/schimidt/g, "schmidt")
+            .replace(/sampai\b/g, "sampaio");
+
+        s = s
+            .replace(/^(rua|avenida|travessa|alameda|rodovia|estrada|praca|largo|viela|beco)\s+/i, "")
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        return s;
     }
 
-    function marcarTodosSospechosos(marcar) {
+    function puntoMasCercanoEnPolilineas(lat, lon, arrayPolilineas) {
+        const mLat = 111320;
+        const mLon = 111320 * Math.cos(lat * Math.PI / 180);
+
+        let mejorDist = Infinity;
+        let mejorLat = lat;
+        let mejorLon = lon;
+
+        for (const poly of arrayPolilineas) {
+            for (let i = 0; i < poly.length - 1; i++) {
+                const A = poly[i], B = poly[i + 1];
+                const ax = (A.lon - lon) * mLon;
+                const ay = (A.lat - lat) * mLat;
+                const bx = (B.lon - lon) * mLon;
+                const by = (B.lat - lat) * mLat;
+
+                const dx = bx - ax;
+                const dy = by - ay;
+                const len2 = dx * dx + dy * dy;
+
+                let t = 0;
+                if (len2 > 0) {
+                    t = -((ax * dx + ay * dy) / len2);
+                    if (t < 0) t = 0;
+                    else if (t > 1) t = 1;
+                }
+
+                const cx = ax + t * dx;
+                const cy = ay + t * dy;
+                const d = Math.sqrt(cx * cx + cy * cy);
+
+                if (d < mejorDist) {
+                    mejorDist = d;
+                    mejorLat = A.lat + t * (B.lat - A.lat);
+                    mejorLon = A.lon + t * (B.lon - A.lon);
+                }
+            }
+        }
+
+        return { dist: mejorDist, lat: mejorLat, lon: mejorLon };
+    }
+
+    async function consultarOverpassConRespaldo(query) {
+        const endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter"
+        ];
+        for (const url of endpoints) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 18000);
+            try {
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+                    body: "data=" + encodeURIComponent(query),
+                    signal: ctrl.signal
+                });
+                clearTimeout(timer);
+                if (res.ok) return await res.json();
+            } catch (e) {
+                clearTimeout(timer);
+            }
+        }
+        return null;
+    }
+
+    async function auditarCallesOnline() {
+        if (mapaExcel.size === 0) return;
+        if (!navigator.onLine) {
+            alert("Necesitas conexión a internet para ejecutar la auditoría online de calles.");
+            return;
+        }
+
+        const btn = document.getElementById("btnAuditarOnline");
+        const estadoEl = document.getElementById("estadoCarga");
+        const txtOrig = btn.innerText;
+        btn.disabled = true;
+
+        try {
+            // 1. Calcular mediana y recuadro seguro (ignorando outliers locos a >25km)
+            const coordsValidas = Array.from(mapaExcel.values())
+                .filter(ex => ex.lat !== null && ex.lon !== null)
+                .map(ex => ({ lat: ex.lat, lon: ex.lon }));
+
+            if (coordsValidas.length === 0) {
+                throw new Error("No hay coordenadas válidas en el Excel para delimitar la zona.");
+            }
+
+            const latsOrd = coordsValidas.map(c => c.lat).sort((a, b) => a - b);
+            const lonsOrd = coordsValidas.map(c => c.lon).sort((a, b) => a - b);
+            const medLat = latsOrd[Math.floor(latsOrd.length / 2)];
+            const medLon = lonsOrd[Math.floor(lonsOrd.length / 2)];
+
+            let minLat = medLat, maxLat = medLat, minLon = medLon, maxLon = medLon;
+            for (const c of coordsValidas) {
+                if (Math.abs(c.lat - medLat) <= 0.15 && Math.abs(c.lon - medLon) <= 0.15) {
+                    if (c.lat < minLat) minLat = c.lat;
+                    if (c.lat > maxLat) maxLat = c.lat;
+                    if (c.lon < minLon) minLon = c.lon;
+                    if (c.lon > maxLon) maxLon = c.lon;
+                }
+            }
+            // Margen de ~550m alrededor de los extremos
+            const s = (minLat - 0.005).toFixed(5);
+            const w = (minLon - 0.005).toFixed(5);
+            const n = (maxLat + 0.005).toFixed(5);
+            const e = (maxLon + 0.005).toFixed(5);
+
+            btn.innerText = "🌐 Descargando calles de la zona...";
+            const query = `[out:json][timeout:18];way["highway"]["name"](${s},${w},${n},${e});out geom;`;
+            const osmData = await consultarOverpassConRespaldo(query);
+
+            if (!osmData || !Array.isArray(osmData.elements)) {
+                throw new Error("Los servidores de OpenStreetMap están ocupados. Intenta de nuevo en unos segundos.");
+            }
+
+            // 2. Indexar calles de OSM por nombre normalizado
+            btn.innerText = "🔍 Auditando pines contra calles...";
+            const osmCalles = new Map(); // normName -> { nombreOriginal, polilineas: [] }
+
+            for (const el of osmData.elements) {
+                if (!el.tags || !el.tags.name || !Array.isArray(el.geometry) || el.geometry.length < 2) continue;
+                const nombreOriginal = el.tags.name;
+                const normName = normalizarCalleComparacion(nombreOriginal);
+                if (!normName) continue;
+
+                if (!osmCalles.has(normName)) {
+                    osmCalles.set(normName, { nombreOriginal, polilineas: [] });
+                }
+                osmCalles.get(normName).polilineas.push(el.geometry);
+            }
+
+            const listaOsmCalles = Array.from(osmCalles.entries());
+            let detectadosParalela = 0;
+            let estimadosCalle = 0;
+            let reparadosSinGps = 0;
+
+            // Limpiar resultados online previos
+            for (const ex of mapaExcel.values()) {
+                ex.sugLat = null;
+                ex.sugLon = null;
+                ex.motivoOnline = "";
+            }
+
+            // 3. Evaluar cada paquete del Excel
+            for (const [codigo, ex] of mapaExcel.entries()) {
+                const parsed = parsearDireccionInteligente(ex.address, ex.zip);
+                const calleEsperadaNorm = normalizarCalleComparacion(ex.address.split(",")[0].split("-")[0]);
+
+                // Buscar calle(s) en OSM que coincidan con el nombre esperado
+                let polilineasEsperadas = [];
+                let nombreEsperadoOsm = "";
+                if (calleEsperadaNorm) {
+                    for (const [normName, info] of listaOsmCalles) {
+                        if (normName === calleEsperadaNorm || similitudBigrams(normName, calleEsperadaNorm) >= 0.80) {
+                            polilineasEsperadas.push(...info.polilineas);
+                            if (!nombreEsperadoOsm) nombreEsperadoOsm = info.nombreOriginal;
+                        }
+                    }
+                }
+
+                // Caso A: Sin GPS (0,0) -> intentar Nominatim primero (con número), sino centro de calle OSM
+                if (ex.lat === null || ex.lon === null) {
+                    btn.innerText = "🔧 Buscando sin GPS...";
+                    const coordNom = await buscarCoordenadaFaltanteOSM(ex);
+                    if (coordNom) {
+                        ex.sugLat = Number(coordNom.lat.toFixed(6));
+                        ex.sugLon = Number(coordNom.lon.toFixed(6));
+                        ex.motivoOnline = "Sin GPS (0,0) → Sugerencia OSM";
+                        reparadosSinGps++;
+                    } else if (polilineasEsperadas.length > 0) {
+                        const seg = polilineasEsperadas[Math.floor(polilineasEsperadas.length / 2)];
+                        const pt = seg[Math.floor(seg.length / 2)];
+                        ex.sugLat = Number(pt.lat.toFixed(6));
+                        ex.sugLon = Number(pt.lon.toFixed(6));
+                        ex.motivoOnline = "Sin GPS (0,0) → Centro de calle OSM";
+                        reparadosSinGps++;
+                    }
+                    continue;
+                }
+
+                // Caso B: Pin con coordenadas -> verificar si cayó sobre otra calle distinta
+                if (polilineasEsperadas.length > 0) {
+                    const proyEsperada = puntoMasCercanoEnPolilineas(ex.lat, ex.lon, polilineasEsperadas);
+
+                    // Buscar cuál es la calle más cercana al pin (en un radio rápido)
+                    let calleMasCercana = "";
+                    let normMasCercana = "";
+                    let distMasCercana = Infinity;
+
+                    for (const [normName, info] of listaOsmCalles) {
+                        // Filtro rápido de caja (~0.003° ~ 330m) antes de proyectar
+                        const p0 = info.polilineas[0][0];
+                        if (Math.abs(p0.lat - ex.lat) > 0.015 || Math.abs(p0.lon - ex.lon) > 0.015) continue;
+
+                        const res = puntoMasCercanoEnPolilineas(ex.lat, ex.lon, info.polilineas);
+                        if (res.dist < distMasCercana) {
+                            distMasCercana = res.dist;
+                            calleMasCercana = info.nombreOriginal;
+                            normMasCercana = normName;
+                        }
+                    }
+
+                    const simCercana = similitudBigrams(normMasCercana, calleEsperadaNorm);
+
+                    // Si el pin está a >= 28m de la calle esperada y pegado (<= 22m) a OTRA calle distinta
+                    if (proyEsperada.dist >= 28 && proyEsperada.dist <= 260 && distMasCercana <= 22 && simCercana < 0.72) {
+                        ex.esPinSospechoso = true;
+                        ex.sugLat = Number(proyEsperada.lat.toFixed(6));
+                        ex.sugLon = Number(proyEsperada.lon.toFixed(6));
+                        ex.motivoOnline = `Cayó en ${calleMasCercana} (a ${Math.round(proyEsperada.dist)}m de ${nombreEsperadoOsm})`;
+                        detectadosParalela++;
+                        continue;
+                    }
+                }
+
+                // Caso C: Si ya estaba marcado por desvío métrico en calle (ej: Rua Itália, 30), estimar mejor punto
+                if (ex.esPinSospechoso && parsed.num !== null && !ex.motivoSospecha.includes("impreciso")) {
+                    const paresBuenos = [];
+                    for (const [otroCod, otroEx] of mapaExcel.entries()) {
+                        if (otroCod === codigo || otroEx.esPinSospechoso || otroEx.lat === null) continue;
+                        const pOtro = parsearDireccionInteligente(otroEx.address, otroEx.zip);
+                        if (pOtro.calle === parsed.calle && pOtro.num !== null && Number(pOtro.num) !== Number(parsed.num)) {
+                            paresBuenos.push({ num: Number(pOtro.num), lat: otroEx.lat, lon: otroEx.lon });
+                        }
+                    }
+
+                    if (paresBuenos.length >= 2) {
+                        const targetNum = Number(parsed.num);
+                        paresBuenos.sort((a, b) => Math.abs(a.num - targetNum) - Math.abs(b.num - targetNum));
+                        const p1 = paresBuenos[0];
+                        // Elegir segundo punto suficientemente separado en número (>= 40)
+                        const p2 = paresBuenos.find(x => Math.abs(x.num - p1.num) >= 40) || paresBuenos[1];
+
+                        if (p1.num !== p2.num) {
+                            const factor = (targetNum - p1.num) / (p1.num - p2.num);
+                            let estLat = p1.lat + factor * (p1.lat - p2.lat);
+                            let estLon = p1.lon + factor * (p1.lon - p2.lon);
+
+                            // Ajustar sobre el trazo real de la calle en OSM si existe
+                            if (polilineasEsperadas.length > 0) {
+                                const snap = puntoMasCercanoEnPolilineas(estLat, estLon, polilineasEsperadas);
+                                estLat = snap.lat;
+                                estLon = snap.lon;
+                            }
+                            ex.sugLat = Number(estLat.toFixed(6));
+                            ex.sugLon = Number(estLon.toFixed(6));
+                            ex.motivoOnline = `${ex.motivoSospecha} → Estimado métrico listo`;
+                            estimadosCalle++;
+                        }
+                    }
+                }
+            }
+
+            recompilarListaSospechosos();
+            reconstruirRutaActiva();
+            guardarEstado();
+            actualizarEstadoCargaUI();
+
+            // Abrir automáticamente la lista si se encontraron casos
+            if (pinesSospechosos.length > 0) {
+                document.getElementById("alertaPines").open = true;
+            }
+
+            const totalMejoras = detectadosParalela + estimadosCalle + reparadosSinGps;
+            estadoEl.innerText = totalMejoras > 0
+                ? `🌐 Auditoría lista: ${detectadosParalela} en calle paralela, ${estimadosCalle} estimado(s), ${reparadosSinGps} sin GPS. Revisa abajo.`
+                : `🌐 Auditoría lista: no se detectaron desvíos a calles paralelas en esta zona.`;
+            estadoEl.style.color = "#4ade80";
+        } catch (err) {
+            console.error(err);
+            estadoEl.innerText = "⚠️ Auditoría online: " + err.message;
+            estadoEl.style.color = "#fde047";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = txtOrig;
+        }
+    }
+
+    function cambiarAccionPin(codigo, accion) {
+        if (accion === "original") mapaAccionPin.delete(codigo);
+        else mapaAccionPin.set(codigo, accion);
+        guardarEstado();
+        reconstruirRutaActiva();
+        actualizarResumenAccionesPin();
+    }
+
+    function aplicarAccionATodosSospechosos(accion) {
         for (const p of pinesSospechosos) {
-            if (marcar) setQuitarGps.add(p.codigo);
-            else setQuitarGps.delete(p.codigo);
+            if (accion === "corregido" && (p.sugLat === null || p.sugLon === null)) {
+                continue; // Si no tiene sugerencia disponible, no lo fuerza
+            }
+            if (accion === "original") mapaAccionPin.delete(p.codigo);
+            else mapaAccionPin.set(p.codigo, accion);
         }
         guardarEstado();
+        reconstruirRutaActiva();
         actualizarEstadoCargaUI();
     }
 
-    function actualizarResumenQuitarGps() {
-        const el = document.getElementById("resumenQuitarGps");
-        if (setQuitarGps.size > 0) {
-            el.innerText = `📍 ${setQuitarGps.size} dirección(es) marcada(s) irán SIN GPS para ubicarlas en Routin.`;
+    function actualizarResumenAccionesPin() {
+        const el = document.getElementById("resumenAccionesPin");
+        let corregidos = 0, sinGps = 0;
+        for (const act of mapaAccionPin.values()) {
+            if (act === "corregido") corregidos++;
+            else if (act === "singps") sinGps++;
+        }
+        const partes = [];
+        if (corregidos > 0) partes.push(`✅ ${corregidos} con pin corregido`);
+        if (sinGps > 0) partes.push(`🚫 ${sinGps} sin GPS para Routin`);
+
+        if (partes.length > 0) {
+            el.innerText = `Al exportar: ${partes.join(" • ")}.`;
             el.classList.add("visible");
         } else {
             el.innerText = "";
@@ -1184,11 +1573,15 @@
 
     function elegirMejorCoordenadaGrupo(codigos) {
         const candidatos = codigos
-            .map(c => ({ codigo: c, ex: mapaExcel.get(c) }))
-            .filter(x => x.ex && x.ex.lat !== null && x.ex.lon !== null);
+            .map(c => {
+                const ex = mapaExcel.get(c);
+                const coord = ex ? obtenerCoordActivaExcel(c, ex) : { lat: null, lon: null };
+                return { codigo: c, ex, lat: coord.lat, lon: coord.lon, esCorregido: mapaAccionPin.get(c) === "corregido" };
+            })
+            .filter(x => x.ex && x.lat !== null && x.lon !== null);
 
         if (candidatos.length === 0) return { lat: null, lon: null, maestro: codigos[0] };
-        if (candidatos.length === 1) return { lat: candidatos[0].ex.lat, lon: candidatos[0].ex.lon, maestro: candidatos[0].codigo };
+        if (candidatos.length === 1) return { lat: candidatos[0].lat, lon: candidatos[0].lon, maestro: candidatos[0].codigo };
 
         let mejor = candidatos[0];
         let mejorScore = -1;
@@ -1196,18 +1589,18 @@
         for (const cand of candidatos) {
             let vecinosCerca = 0;
             for (const otro of candidatos) {
-                if (distanciaMetros(cand.ex.lat, cand.ex.lon, otro.ex.lat, otro.ex.lon) <= 45) {
+                if (distanciaMetros(cand.lat, cand.lon, otro.lat, otro.lon) <= 45) {
                     vecinosCerca++;
                 }
             }
-            const bonusPrecision = cand.ex.esPinSospechoso ? 0 : 0.5;
+            const bonusPrecision = (!cand.ex.esPinSospechoso || cand.esCorregido) ? 0.5 : 0;
             const score = vecinosCerca + bonusPrecision;
             if (score > mejorScore) {
                 mejorScore = score;
                 mejor = cand;
             }
         }
-        return { lat: mejor.ex.lat, lon: mejor.ex.lon, maestro: mejor.codigo };
+        return { lat: mejor.lat, lon: mejor.lon, maestro: mejor.codigo };
     }
 
     // ---------------- EXPORTAR EXCEL LIMPIO PARA ROUTIN ----------------
@@ -1261,46 +1654,14 @@
         const textoOriginalBtn = btn.innerText;
 
         try {
-            const sinGps = Array.from(mapaExcel.entries()).filter(
-                ([tn, ex]) => (ex.lat === null || ex.lon === null) && !setQuitarGps.has(tn)
-            );
-            let reparados = 0;
-            let siguenSinGps = [];
-
-            if (sinGps.length > 0 && navigator.onLine && sinGps.length <= 8) {
-                for (let i = 0; i < sinGps.length; i++) {
-                    const [tn, ex] = sinGps[i];
-                    btn.innerText = `⏳ Buscando GPS faltante (${i + 1}/${sinGps.length})...`;
-                    const coord = await buscarCoordenadaFaltanteOSM(ex);
-                    if (coord) {
-                        ex.lat = coord.lat;
-                        ex.lon = coord.lon;
-                        ex.esPinSospechoso = true;
-                        ex.motivoSospecha = "Reparado por OSM (verificar)";
-                        ex.pinCorregido = true;
-                        reparados++;
-                    } else {
-                        siguenSinGps.push(`${tn} (${ex.address})`);
-                    }
-                    if (i < sinGps.length - 1) await new Promise(r => setTimeout(r, 1050));
-                }
-                analizarPinesSospechososExcel();
-                guardarEstado();
-            } else if (sinGps.length > 0) {
-                siguenSinGps = sinGps.map(([tn, ex]) => `${tn} (${ex.address})`);
-            }
-
-            btn.innerText = "⏳ Generando Excel limpio...";
-            const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
-                codigo,
-                texto: ex.address,
-                zip: ex.zip,
-                lat: ex.lat,
-                lon: ex.lon
-            }));
+            const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => {
+                const coord = obtenerCoordActivaExcel(codigo, ex);
+                return { codigo, texto: ex.address, zip: ex.zip, lat: coord.lat, lon: coord.lon };
+            });
             const grupos = construirGruposSentidoComun(itemsExcel);
 
             const filasLimpias = [];
+            let cantCorregidos = 0, cantSinGps = 0;
 
             for (const codigos of grupos.values()) {
                 const { lat: bestLat, lon: bestLon, maestro } = elegirMejorCoordenadaGrupo(codigos);
@@ -1309,10 +1670,14 @@
 
                 if (metodo === "agrupado") {
                     const ex = mapaExcel.get(maestro);
-                    const omitirGps = codigos.some(c => setQuitarGps.has(c));
-                    const esSospechoso = bestLat === null || ex.esPinSospechoso;
+                    const omitirGps = codigos.some(c => mapaAccionPin.get(c) === "singps");
+                    const usaCorregido = codigos.some(c => mapaAccionPin.get(c) === "corregido");
+                    const esSospechoso = (bestLat === null || ex.esPinSospechoso) && !usaCorregido;
                     const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                     const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+
+                    if (usaCorregido && bestLat !== null) cantCorregidos++;
+                    if (omitirGps || bestLat === null) cantSinGps++;
 
                     filasLimpias.push({
                         "Nombre": `${tagMulti}${tagPin}${ex.address}`,
@@ -1327,12 +1692,20 @@
                 } else {
                     for (const tn of codigos) {
                         const ex = mapaExcel.get(tn);
-                        const omitirGps = setQuitarGps.has(tn);
+                        const accion = mapaAccionPin.get(tn) || "original";
+                        const coord = obtenerCoordActivaExcel(tn, ex);
+                        // Si el grupo unifica un pin perdido (ej: Jacanã), heredamos bestLat salvo que este marcado como singps/corregido propio
+                        const latFinal = accion === "singps" ? null : (accion === "corregido" ? coord.lat : bestLat);
+                        const lonFinal = accion === "singps" ? null : (accion === "corregido" ? coord.lon : bestLon);
+
                         const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
                         const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
-                        const esSospechoso = bestLat === null || ex.esPinSospechoso;
+                        const esSospechoso = (latFinal === null || ex.esPinSospechoso) && accion !== "corregido";
                         const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                         const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+
+                        if (accion === "corregido" && latFinal !== null) cantCorregidos++;
+                        if (latFinal === null) cantSinGps++;
 
                         filasLimpias.push({
                             "Nombre": `${tagMulti}${tagPin}${prefijoSeq}${ex.address}`,
@@ -1341,8 +1714,8 @@
                             "Cidade": ex.city,
                             "CEP": ex.zip,
                             "SPX_TN": tn,
-                            "Latitude": (!omitirGps && bestLat !== null) ? bestLat : "",
-                            "Longitude": (!omitirGps && bestLon !== null) ? bestLon : ""
+                            "Latitude": latFinal !== null ? latFinal : "",
+                            "Longitude": lonFinal !== null ? lonFinal : ""
                         });
                     }
                 }
@@ -1366,13 +1739,11 @@
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(url), 1500);
 
-            actualizarEstadoCargaUI();
             let msgExtra = `✅ Exportadas ${filasLimpias.length} filas (${metodo}).`;
-            if (setQuitarGps.size > 0) msgExtra += ` 📍 ${setQuitarGps.size} sin GPS para Routin.`;
-            if (reparados > 0) msgExtra += ` 🔧 ${reparados} reparado(s).`;
-            if (siguenSinGps.length > 0) msgExtra += ` ⚠️ ${siguenSinGps.length} sin GPS.`;
+            if (cantCorregidos > 0) msgExtra += ` ✅ ${cantCorregidos} pin(es) corregido(s).`;
+            if (cantSinGps > 0) msgExtra += ` 📍 ${cantSinGps} sin GPS para Routin.`;
             estadoEl.innerText = msgExtra;
-            estadoEl.style.color = siguenSinGps.length > 0 ? "#fde047" : "#4ade80";
+            estadoEl.style.color = "#4ade80";
         } finally {
             btn.disabled = false;
             btn.innerText = textoOriginalBtn;
@@ -1491,29 +1862,29 @@
 
         for (const [codigo, pdfInfo] of mapaPdfBase.entries()) {
             const ex = mapaExcel.get(codigo);
+            const coord = ex ? obtenerCoordActivaExcel(codigo, ex) : { lat: null, lon: null };
+            const esCorr = mapaAccionPin.get(codigo) === "corregido";
+
             mapaRuta.set(codigo, {
                 parada: pdfInfo.parada,
                 refShopee: pdfInfo.refShopee,
                 dirPDF: pdfInfo.dirPDF,
                 dirCompleta: ex ? (ex.address || pdfInfo.dirPDF) : pdfInfo.dirPDF,
                 bairro: ex ? (ex.bairro || "") : "",
-                lat: ex ? ex.lat : null,
-                lon: ex ? ex.lon : null,
+                lat: coord.lat,
+                lon: coord.lon,
                 zip: ex ? (ex.zip || "") : "",
-                esPinSospechoso: ex ? ex.esPinSospechoso : false,
-                motivoSospecha: ex ? (ex.motivoSospecha || "") : "",
+                esPinSospechoso: ex ? (ex.esPinSospechoso && !esCorr) : false,
+                motivoSospecha: ex ? (ex.motivoOnline || ex.motivoSospecha || "") : "",
                 grupoId: ""
             });
         }
 
         if (mapaExcel.size > 0) {
-            const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
-                codigo,
-                texto: ex.address,
-                zip: ex.zip,
-                lat: ex.lat,
-                lon: ex.lon
-            }));
+            const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => {
+                const coord = obtenerCoordActivaExcel(codigo, ex);
+                return { codigo, texto: ex.address, zip: ex.zip, lat: coord.lat, lon: coord.lon };
+            });
             const gruposExcel = construirGruposSentidoComun(itemsExcel);
 
             for (const codigosGrupo of gruposExcel.values()) {
@@ -1523,17 +1894,19 @@
                     for (const cod of codigosGrupo) {
                         if (!mapaRuta.has(cod)) {
                             const ex = mapaExcel.get(cod);
+                            const coord = obtenerCoordActivaExcel(cod, ex);
+                            const esCorr = mapaAccionPin.get(cod) === "corregido";
                             mapaRuta.set(cod, {
                                 parada: paradaHeredada,
                                 refShopee: (ex.seq && ex.seq !== "-") ? `${ex.seq}/${ex.stop}` : "",
                                 dirPDF: ex.address,
                                 dirCompleta: ex.address,
                                 bairro: ex.bairro || "",
-                                lat: ex.lat,
-                                lon: ex.lon,
+                                lat: coord.lat,
+                                lon: coord.lon,
                                 zip: ex.zip || "",
-                                esPinSospechoso: ex.esPinSospechoso,
-                                motivoSospecha: ex.motivoSospecha || "",
+                                esPinSospechoso: ex.esPinSospechoso && !esCorr,
+                                motivoSospecha: ex.motivoOnline || ex.motivoSospecha || "",
                                 grupoId: ""
                             });
                         }
@@ -1601,7 +1974,7 @@
             localStorage.setItem(STORAGE_EXCEL, JSON.stringify(Array.from(mapaExcel.entries())));
             localStorage.setItem(STORAGE_SCAN, JSON.stringify(Array.from(setEscaneados)));
             localStorage.setItem(STORAGE_ATRAS, JSON.stringify(Array.from(setAtras)));
-            localStorage.setItem(STORAGE_QUITAR_GPS, JSON.stringify(Array.from(setQuitarGps)));
+            localStorage.setItem(STORAGE_ACCION_PIN, JSON.stringify(Array.from(mapaAccionPin.entries())));
         } catch (e) {
             console.warn("No se pudo guardar en localStorage:", e);
         }
@@ -1615,7 +1988,7 @@
             const rawEx = localStorage.getItem(STORAGE_EXCEL);
             if (rawEx) {
                 mapaExcel = new Map(JSON.parse(rawEx));
-                analizarPinesSospechososExcel();
+                analizarPinesSospechososOffline();
             }
 
             const rawScan = localStorage.getItem(STORAGE_SCAN);
@@ -1624,8 +1997,8 @@
             const rawAtras = localStorage.getItem(STORAGE_ATRAS);
             if (rawAtras) setAtras = new Set(JSON.parse(rawAtras));
 
-            const rawQG = localStorage.getItem(STORAGE_QUITAR_GPS);
-            if (rawQG) setQuitarGps = new Set(JSON.parse(rawQG));
+            const rawAcc = localStorage.getItem(STORAGE_ACCION_PIN);
+            if (rawAcc) mapaAccionPin = new Map(JSON.parse(rawAcc));
 
             reconstruirRutaActiva();
             actualizarUIProgreso();
@@ -1647,7 +2020,7 @@
         const alertaPines = document.getElementById("alertaPines");
 
         exportBox.classList.toggle("visible", mapaExcel.size > 0);
-        actualizarResumenQuitarGps();
+        actualizarResumenAccionesPin();
 
         if (mapaPdfBase.size === 0 && mapaExcel.size === 0) {
             estadoEl.innerText = "Esperando archivos...";
@@ -1687,16 +2060,19 @@
             alertaOmision.innerHTML = "";
         }
 
+        // Lista desplegable de pines sospechosos con revisión y sugerencia de corrección
         if (pinesSospechosos.length > 0) {
+            const conSug = pinesSospechosos.filter(p => p.sugLat !== null).length;
             document.getElementById("alertaPinesResumen").innerText =
-                `⚠️ ${pinesSospechosos.length} pin(es) sospechoso(s) grave(s) — Tocar para revisar`;
+                `⚠️ ${pinesSospechosos.length} pin(es) sospechoso(s)` + (conSug > 0 ? ` (${conSug} con corrección)` : "") + ` — Tocar`;
 
             const toolbar = `
                 <div class="pines-toolbar">
-                    <span>Marca los que irán <strong>SIN GPS</strong> a Routin:</span>
-                    <span style="display:flex; gap:5px;">
-                        <button type="button" class="btn-mini" onclick="marcarTodosSospechosos(true)">Todos</button>
-                        <button type="button" class="btn-mini" onclick="marcarTodosSospechosos(false)">Ninguno</button>
+                    <span>Acción en lote:</span>
+                    <span style="display:flex; gap:4px; flex-wrap:wrap;">
+                        ${conSug > 0 ? `<button type="button" class="btn-mini" onclick="aplicarAccionATodosSospechosos('corregido')">✅ Corregidos</button>` : ""}
+                        <button type="button" class="btn-mini" onclick="aplicarAccionATodosSospechosos('singps')">🚫 Sin GPS</button>
+                        <button type="button" class="btn-mini" onclick="aplicarAccionATodosSospechosos('original')">↩️ Originales</button>
                     </span>
                 </div>
             `;
@@ -1707,20 +2083,33 @@
                 const pinShopeeBtn = (p.lat !== null && p.lon !== null)
                     ? `<a class="pin-btn-map gps" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}">📍 Shopee</a>`
                     : "";
-                const checked = setQuitarGps.has(p.codigo) ? "checked" : "";
+                const pinNuevoBtn = (p.sugLat !== null && p.sugLon !== null)
+                    ? `<a class="pin-btn-map nuevo" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.sugLat},${p.sugLon}">📍 Nuevo</a>`
+                    : "";
+
+                const accionActual = mapaAccionPin.get(p.codigo) || "original";
+                const optCorregido = (p.sugLat !== null && p.sugLon !== null)
+                    ? `<option value="corregido" ${accionActual === "corregido" ? "selected" : ""}>✅ Usar pin corregido</option>`
+                    : "";
+
                 return `
                     <div class="pin-row">
-                        <label style="display:flex; align-items:flex-start; gap:7px; flex:1; min-width:0; cursor:pointer;">
-                            <input type="checkbox" ${checked} onchange="toggleQuitarGps('${esc(p.codigo)}', this.checked)" style="margin-top:3px; flex-shrink:0;">
-                            <div style="min-width:0; word-break:break-word;">
+                        <div class="pin-row-top">
+                            <div style="min-width:0; word-break:break-word; flex:1;">
                                 <strong>${esc(p.address)}</strong>
-                                <div style="font-size:0.73rem; color:#fcd34d;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
+                                <div style="font-size:0.73rem; color:#fcd34d; margin-top:2px;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
                             </div>
-                        </label>
-                        <div class="pin-row-actions">
-                            ${pinShopeeBtn}
-                            <a class="pin-btn-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qCalle}">📍 Maps</a>
+                            <div class="pin-row-actions">
+                                ${pinShopeeBtn}
+                                ${pinNuevoBtn}
+                                <a class="pin-btn-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qCalle}">📍 Maps</a>
+                            </div>
                         </div>
+                        <select class="pin-select" onchange="cambiarAccionPin('${esc(p.codigo)}', this.value)">
+                            <option value="original" ${accionActual === "original" ? "selected" : ""}>Mantener pin original (Shopee)</option>
+                            ${optCorregido}
+                            <option value="singps" ${accionActual === "singps" ? "selected" : ""}>🚫 Exportar SIN GPS (ubicar en Routin)</option>
+                        </select>
                     </div>
                 `;
             }).join("");
@@ -1742,7 +2131,7 @@
         mapaGrupos.clear();
         setEscaneados.clear();
         setAtras.clear();
-        setQuitarGps.clear();
+        mapaAccionPin.clear();
         omitidosEnPdf = [];
         pinesSospechosos = [];
 
@@ -1750,7 +2139,7 @@
         localStorage.removeItem(STORAGE_EXCEL);
         localStorage.removeItem(STORAGE_SCAN);
         localStorage.removeItem(STORAGE_ATRAS);
-        localStorage.removeItem(STORAGE_QUITAR_GPS);
+        localStorage.removeItem(STORAGE_ACCION_PIN);
 
         document.getElementById("busquedaManual").value = "";
         document.getElementById("busquedaResultados").innerHTML = "";
@@ -2409,3 +2798,4 @@
 </script>
 </body>
 </html>
+```
