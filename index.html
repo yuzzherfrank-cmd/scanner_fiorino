@@ -88,7 +88,6 @@
             transition: width 0.25s ease;
         }
 
-        /* Selector de Modo de Escaneo */
         .modo-switch {
             display: flex;
             gap: 6px;
@@ -116,7 +115,6 @@
             border-color: #a78bfa;
         }
 
-        /* Escáner */
         .scanner-wrap {
             position: relative;
             background: #000;
@@ -140,7 +138,6 @@
         }
         .scanner-controls button { flex: 1; }
 
-        /* Tarjeta de Resultado */
         #resultado {
             border-radius: 12px;
             padding: 15px 14px;
@@ -280,7 +277,6 @@
         .btn-mini.copiado { background: #fef08a; color: #000; border-color: #fef08a; }
         .btn-mini.atras-on { background: #f97316; border-color: #fed7aa; }
 
-        /* Paneles inferiores */
         .panel {
             background: var(--card);
             border: 1px solid var(--border);
@@ -481,6 +477,7 @@
         }
         .pin-btn-map.gps { background: #1d4ed8; }
         .pin-btn-map.nuevo { background: #15803d; }
+        .pin-btn-map.manual { background: #7c3aed; }
         .pin-select {
             padding: 6px 8px;
             font-size: 0.78rem;
@@ -488,6 +485,14 @@
             background: #111827;
             border: 1px solid #4b5563;
             color: #f3f4f6;
+        }
+        .pin-manual-input {
+            padding: 6px 8px !important;
+            font-size: 0.78rem !important;
+            border-radius: 6px !important;
+            background: #111827 !important;
+            border: 1px solid #4b5563 !important;
+            color: #f3f4f6 !important;
         }
 
         /* Modal Lista de Control */
@@ -743,11 +748,8 @@
     let linternaActiva = false;
     let usarCamaraFrontal = false;
 
-    // "voz" | "pitido" | "mudo"
     let modoAudio = "voz";
     let audioCtx = null;
-
-    // "secuencia" | "atras"
     let modoEscaneo = "secuencia";
 
     let ultimoCodigoLeido = "";
@@ -757,17 +759,15 @@
     let mapaExcel = new Map();
     let setEscaneados = new Set();
     let setAtras = new Set();
-    let mapaAccionPin = new Map();
+    let mapaAccionPin = new Map(); // "original" | "corregido" | "manual" | "singps"
 
     let mapaRuta = new Map();
     let mapaGrupos = new Map();
     let omitidosEnPdf = [];
     let pinesSospechosos = [];
 
-    // Caché en memoria para Overpass en la misma sesión
     let cacheOsmKey = "";
     let cacheOsmCalles = null;
-
     let tabActual = "faltantes";
 
     // ---------------- AUDIO Y VOZ ----------------
@@ -876,10 +876,65 @@
     function obtenerCoordActivaExcel(codigo, ex) {
         const accion = mapaAccionPin.get(codigo) || "original";
         if (accion === "singps") return { lat: null, lon: null };
+        if (accion === "manual" && ex.manualLat !== null && ex.manualLon !== null) {
+            return { lat: ex.manualLat, lon: ex.manualLon };
+        }
         if (accion === "corregido" && ex.sugLat !== null && ex.sugLon !== null) {
             return { lat: ex.sugLat, lon: ex.sugLon };
         }
         return { lat: ex.lat, lon: ex.lon };
+    }
+
+    // Extrae lat/lon de coordenadas pegadas (-22.74, -47.36 o con coma) o URLs de Google Maps
+    function extraerCoordDeTexto(texto) {
+        const s = String(texto || "").trim();
+        if (!s) return null;
+
+        // 1. URL de Google Maps con pin exacto (!3dLAT!4dLON)
+        const m3d = s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+        if (m3d) {
+            const lat = parseFloat(m3d[1]), lon = parseFloat(m3d[2]);
+            if (Math.abs(lat) > 1 && Math.abs(lon) > 1) return { lat, lon };
+        }
+
+        // 2. URL de Google Maps con /@LAT,LON o ?q=LAT,LON
+        const mUrl = s.match(/[@?=](-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+        if (mUrl) {
+            const lat = parseFloat(mUrl[1]), lon = parseFloat(mUrl[2]);
+            if (Math.abs(lat) > 1 && Math.abs(lon) > 1) return { lat, lon };
+        }
+
+        // 3. Coordenadas pegadas directo (acepta punto o coma decimal: "-22,7428, -47,3665")
+        const mPlain = s.match(/(-?\d{1,3}[.,]\d{3,})[\s,;]+(-?\d{1,3}[.,]\d{3,})/);
+        if (mPlain) {
+            const lat = parseFloat(mPlain[1].replace(",", "."));
+            const lon = parseFloat(mPlain[2].replace(",", "."));
+            if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) > 1 && Math.abs(lon) > 1) {
+                return { lat, lon };
+            }
+        }
+        return null;
+    }
+
+    function pegarCoordManual(codigo, texto) {
+        const ex = mapaExcel.get(codigo);
+        if (!ex) return;
+        const t = String(texto || "").trim();
+        if (!t) return;
+
+        const coord = extraerCoordDeTexto(t);
+        if (!coord) {
+            alert("No pude leer la coordenada. Pega algo como: -22.7428, -47.3665 o el link completo de Google Maps.");
+            return;
+        }
+
+        ex.manualLat = Number(coord.lat.toFixed(6));
+        ex.manualLon = Number(coord.lon.toFixed(6));
+        mapaAccionPin.set(codigo, "manual");
+        recompilarListaSospechosos();
+        reconstruirRutaActiva();
+        guardarEstado();
+        actualizarEstadoCargaUI();
     }
 
     // ---------------- CARGA DE EXCEL SHOPEE ----------------
@@ -959,6 +1014,8 @@
                     lon: sinGPS ? null : lonParsed.val,
                     sugLat: null,
                     sugLon: null,
+                    manualLat: null,
+                    manualLon: null,
                     esPinSospechoso: sinGPS || bajaPrec,
                     motivoSospecha,
                     motivoOnline: ""
@@ -1064,6 +1121,8 @@
                     lon: ex.lon,
                     sugLat: ex.sugLat,
                     sugLon: ex.sugLon,
+                    manualLat: ex.manualLat ?? null,
+                    manualLon: ex.manualLon ?? null,
                     motivo: ex.motivoOnline || ex.motivoSospecha || "Pin sospechoso"
                 });
             }
@@ -1154,12 +1213,9 @@
 
     async function intentarOverpass(s, w, n, e, btn) {
         const bboxKey = `${s},${w},${n},${e}`;
-        if (cacheOsmKey === bboxKey && cacheOsmCalles) {
-            return cacheOsmCalles;
-        }
+        if (cacheOsmKey === bboxKey && cacheOsmCalles) return cacheOsmCalles;
 
         const query = `[out:json][timeout:40];way["highway"]["name"](${s},${w},${n},${e});out geom;`;
-        // Nota: overpass.private.coffee suele aceptar incluso con VPN; overpass-api.de es ultra rápido sin VPN
         const endpoints = [
             { url: "https://overpass-api.de/api/interpreter", ms: 16000 },
             { url: "https://overpass.private.coffee/api/interpreter", ms: 42000 }
@@ -1200,7 +1256,6 @@
         return null;
     }
 
-    // Plan B: OSRM /nearest + Photon (funciona siempre incluso con VPN)
     async function buscarEnPhoton(dirQuery, refLat, refLon) {
         try {
             const bias = (refLat !== null && refLon !== null) ? `&lat=${refLat}&lon=${refLon}` : "";
@@ -1218,7 +1273,6 @@
     }
 
     async function auditarConPlanBOSRM(btn) {
-        // Agrupar paquetes por dirección para no repetir consultas innecesarias
         const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
             codigo, texto: ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon
         }));
@@ -1236,7 +1290,6 @@
             const exRep = mapaExcel.get(codigos[0]);
             const calleEspNorm = normalizarCalleComparacion(exRep.address.split(",")[0].split("-")[0]);
 
-            // Caso 0,0
             if (exRep.lat === null || exRep.lon === null) {
                 const dirQ = limpiarDireccionParaRoutin(exRep.address, "", exRep.city || "Santa Bárbara D'Oeste", "");
                 let coord = null;
@@ -1258,7 +1311,6 @@
                 continue;
             }
 
-            // Consultar los 6 segmentos de calle más cercanos vía OSRM
             try {
                 const ctrl = new AbortController();
                 const timer = setTimeout(() => ctrl.abort(), 7000);
@@ -1274,7 +1326,6 @@
                             const normCercana = normalizarCalleComparacion(wNamed.name);
                             const simCercana = similitudBigrams(normCercana, calleEspNorm);
 
-                            // Buscar si la calle esperada aparece entre los otros waypoints cercanos
                             const wEsperado = data.waypoints.find(w =>
                                 w.name && similitudBigrams(normalizarCalleComparacion(w.name), calleEspNorm) >= 0.78
                             );
@@ -1290,7 +1341,6 @@
                                     }
                                     detectados += codigos.length;
                                 } else if (!wEsperado) {
-                                    // Si ni siquiera apareció entre las 6 calles más cercanas, buscar en Photon
                                     const dirQ = limpiarDireccionParaRoutin(exRep.address, "", exRep.city || "Santa Bárbara D'Oeste", "");
                                     const feats = await buscarEnPhoton(dirQ, exRep.lat, exRep.lon);
                                     const matchF = feats.find(f => {
@@ -1325,7 +1375,7 @@
         }
 
         if (erroresRed > listaGrupos.length * 0.7) {
-            throw new Error("No hubo respuesta de OSRM ni Overpass (revisa VPN o conexión).");
+            throw new Error("No hubo respuesta de OSRM ni Overpass.");
         }
         return { detectadosParalela: detectados, reparadosSinGps, estimadosCalle: 0, totalCallesTexto: "OSRM+Photon" };
     }
@@ -1376,7 +1426,6 @@
             const n = (maxLat + 0.004).toFixed(5);
             const e = (maxLon + 0.004).toFixed(5);
 
-            // Intentar primero Overpass (1 sola consulta); si falla/bloquea VPN, usar Plan B (OSRM + Photon)
             const osmCalles = await intentarOverpass(s, w, n, e, btn);
 
             let resumen;
@@ -1488,7 +1537,6 @@
                 resumen = { detectadosParalela, estimadosCalle, reparadosSinGps, totalCallesTexto: `${osmCalles.size} calles` };
             } else {
                 resumen = await auditarConPlanBOSRM(btn);
-                // También estimar métricamente los sospechosos de calle (ej: Rua Itália, 30) usando pares buenos del Excel
                 for (const [codigo, ex] of mapaExcel.entries()) {
                     if (ex.esPinSospechoso && ex.sugLat === null && !ex.motivoSospecha.includes("impreciso")) {
                         const parsed = parsearDireccionInteligente(ex.address, ex.zip);
@@ -1563,13 +1611,15 @@
 
     function actualizarResumenAccionesPin() {
         const el = document.getElementById("resumenAccionesPin");
-        let corregidos = 0, sinGps = 0;
+        let corregidos = 0, manuales = 0, sinGps = 0;
         for (const act of mapaAccionPin.values()) {
             if (act === "corregido") corregidos++;
+            else if (act === "manual") manuales++;
             else if (act === "singps") sinGps++;
         }
         const partes = [];
-        if (corregidos > 0) partes.push(`✅ ${corregidos} con pin corregido`);
+        if (manuales > 0) partes.push(`📌 ${manuales} pegado(s) de Maps`);
+        if (corregidos > 0) partes.push(`✅ ${corregidos} corregido(s)`);
         if (sinGps > 0) partes.push(`🚫 ${sinGps} sin GPS para Routin`);
 
         if (partes.length > 0) {
@@ -1727,7 +1777,8 @@
             .map(c => {
                 const ex = mapaExcel.get(c);
                 const coord = ex ? obtenerCoordActivaExcel(c, ex) : { lat: null, lon: null };
-                return { codigo: c, ex, lat: coord.lat, lon: coord.lon, esCorregido: mapaAccionPin.get(c) === "corregido" };
+                const act = mapaAccionPin.get(c);
+                return { codigo: c, ex, lat: coord.lat, lon: coord.lon, esBueno: act === "corregido" || act === "manual" };
             })
             .filter(x => x.ex && x.lat !== null && x.lon !== null);
 
@@ -1744,7 +1795,7 @@
                     vecinosCerca++;
                 }
             }
-            const bonusPrecision = (!cand.ex.esPinSospechoso || cand.esCorregido) ? 0.5 : 0;
+            const bonusPrecision = (!cand.ex.esPinSospechoso || cand.esBueno) ? 0.5 : 0;
             const score = vecinosCerca + bonusPrecision;
             if (score > mejorScore) {
                 mejorScore = score;
@@ -1822,12 +1873,15 @@
                 if (metodo === "agrupado") {
                     const ex = mapaExcel.get(maestro);
                     const omitirGps = codigos.some(c => mapaAccionPin.get(c) === "singps");
-                    const usaCorregido = codigos.some(c => mapaAccionPin.get(c) === "corregido");
-                    const esSospechoso = (bestLat === null || ex.esPinSospechoso) && !usaCorregido;
+                    const usaBueno = codigos.some(c => {
+                        const a = mapaAccionPin.get(c);
+                        return a === "corregido" || a === "manual";
+                    });
+                    const esSospechoso = (bestLat === null || ex.esPinSospechoso) && !usaBueno;
                     const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                     const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
 
-                    if (usaCorregido && bestLat !== null) cantCorregidos++;
+                    if (usaBueno && bestLat !== null) cantCorregidos++;
                     if (omitirGps || bestLat === null) cantSinGps++;
 
                     filasLimpias.push({
@@ -1845,16 +1899,17 @@
                         const ex = mapaExcel.get(tn);
                         const accion = mapaAccionPin.get(tn) || "original";
                         const coord = obtenerCoordActivaExcel(tn, ex);
-                        const latFinal = accion === "singps" ? null : (accion === "corregido" ? coord.lat : bestLat);
-                        const lonFinal = accion === "singps" ? null : (accion === "corregido" ? coord.lon : bestLon);
+                        const usaPropio = accion === "corregido" || accion === "manual";
+                        const latFinal = accion === "singps" ? null : (usaPropio ? coord.lat : bestLat);
+                        const lonFinal = accion === "singps" ? null : (usaPropio ? coord.lon : bestLon);
 
                         const tieneSeq = ex.seq && ex.seq !== "-" && ex.stop && ex.stop !== "-";
                         const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
-                        const esSospechoso = (latFinal === null || ex.esPinSospechoso) && accion !== "corregido";
+                        const esSospechoso = (latFinal === null || ex.esPinSospechoso) && !usaPropio;
                         const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
                         const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
 
-                        if (accion === "corregido" && latFinal !== null) cantCorregidos++;
+                        if (usaPropio && latFinal !== null) cantCorregidos++;
                         if (latFinal === null) cantSinGps++;
 
                         filasLimpias.push({
@@ -1890,7 +1945,7 @@
             setTimeout(() => URL.revokeObjectURL(url), 1500);
 
             let msgExtra = `✅ Exportadas ${filasLimpias.length} filas (${metodo}).`;
-            if (cantCorregidos > 0) msgExtra += ` ✅ ${cantCorregidos} pin(es) corregido(s).`;
+            if (cantCorregidos > 0) msgExtra += ` ✅ ${cantCorregidos} pin(es) corregido(s)/pegado(s).`;
             if (cantSinGps > 0) msgExtra += ` 📍 ${cantSinGps} sin GPS para Routin.`;
             estadoEl.innerText = msgExtra;
             estadoEl.style.color = "#4ade80";
@@ -2013,7 +2068,8 @@
         for (const [codigo, pdfInfo] of mapaPdfBase.entries()) {
             const ex = mapaExcel.get(codigo);
             const coord = ex ? obtenerCoordActivaExcel(codigo, ex) : { lat: null, lon: null };
-            const esCorr = mapaAccionPin.get(codigo) === "corregido";
+            const act = mapaAccionPin.get(codigo);
+            const esBueno = act === "corregido" || act === "manual";
 
             mapaRuta.set(codigo, {
                 parada: pdfInfo.parada,
@@ -2024,7 +2080,7 @@
                 lat: coord.lat,
                 lon: coord.lon,
                 zip: ex ? (ex.zip || "") : "",
-                esPinSospechoso: ex ? (ex.esPinSospechoso && !esCorr) : false,
+                esPinSospechoso: ex ? (ex.esPinSospechoso && !esBueno) : false,
                 motivoSospecha: ex ? (ex.motivoOnline || ex.motivoSospecha || "") : "",
                 grupoId: ""
             });
@@ -2045,7 +2101,8 @@
                         if (!mapaRuta.has(cod)) {
                             const ex = mapaExcel.get(cod);
                             const coord = obtenerCoordActivaExcel(cod, ex);
-                            const esCorr = mapaAccionPin.get(cod) === "corregido";
+                            const act = mapaAccionPin.get(cod);
+                            const esBueno = act === "corregido" || act === "manual";
                             mapaRuta.set(cod, {
                                 parada: paradaHeredada,
                                 refShopee: (ex.seq && ex.seq !== "-") ? `${ex.seq}/${ex.stop}` : "",
@@ -2055,7 +2112,7 @@
                                 lat: coord.lat,
                                 lon: coord.lon,
                                 zip: ex.zip || "",
-                                esPinSospechoso: ex.esPinSospechoso && !esCorr,
+                                esPinSospechoso: ex.esPinSospechoso && !esBueno,
                                 motivoSospecha: ex.motivoOnline || ex.motivoSospecha || "",
                                 grupoId: ""
                             });
@@ -2235,11 +2292,18 @@
                 const pinNuevoBtn = (p.sugLat !== null && p.sugLon !== null)
                     ? `<a class="pin-btn-map nuevo" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.sugLat},${p.sugLon}">📍 Nuevo</a>`
                     : "";
+                const pinManualBtn = (p.manualLat !== null && p.manualLon !== null)
+                    ? `<a class="pin-btn-map manual" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${p.manualLat},${p.manualLon}">📌 Pegado</a>`
+                    : "";
 
                 const accionActual = mapaAccionPin.get(p.codigo) || "original";
                 const optCorregido = (p.sugLat !== null && p.sugLon !== null)
                     ? `<option value="corregido" ${accionActual === "corregido" ? "selected" : ""}>✅ Usar pin corregido</option>`
                     : "";
+                const optManual = (p.manualLat !== null && p.manualLon !== null)
+                    ? `<option value="manual" ${accionActual === "manual" ? "selected" : ""}>📌 Usar coord. pegada (${p.manualLat}, ${p.manualLon})</option>`
+                    : "";
+                const valorManualTexto = (p.manualLat !== null && p.manualLon !== null) ? `${p.manualLat}, ${p.manualLon}` : "";
 
                 return `
                     <div class="pin-row">
@@ -2251,11 +2315,16 @@
                             <div class="pin-row-actions">
                                 ${pinShopeeBtn}
                                 ${pinNuevoBtn}
+                                ${pinManualBtn}
                                 <a class="pin-btn-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${qCalle}">📍 Maps</a>
                             </div>
                         </div>
+                        <input type="text" class="pin-manual-input" value="${esc(valorManualTexto)}"
+                            placeholder="Pegar coord. o link de Google Maps..."
+                            onchange="pegarCoordManual('${esc(p.codigo)}', this.value)">
                         <select class="pin-select" onchange="cambiarAccionPin('${esc(p.codigo)}', this.value)">
                             <option value="original" ${accionActual === "original" ? "selected" : ""}>Mantener pin original (Shopee)</option>
+                            ${optManual}
                             ${optCorregido}
                             <option value="singps" ${accionActual === "singps" ? "selected" : ""}>🚫 Exportar SIN GPS (ubicar en Routin)</option>
                         </select>
