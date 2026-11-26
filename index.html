@@ -6,9 +6,12 @@
     <meta name="theme-color" content="#121212">
     <title>Escáner Pro - Carga Fiorino</title>
     <link rel="manifest" href="manifest.json">
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="vendor/leaflet.min.css">
+    <script src="vendor/leaflet.min.js"></script>
+    <script src="vendor/html5-qrcode.min.js"></script>
+    <script src="vendor/pdf.min.js"></script>
+    <script src="vendor/xlsx.full.min.js"></script>
+    <script src="cap-bridge.js"></script>
     <style>
         :root {
             --bg: #101216;
@@ -478,6 +481,7 @@
         .pin-btn-map.gps { background: #1d4ed8; }
         .pin-btn-map.nuevo { background: #15803d; }
         .pin-btn-map.manual { background: #7c3aed; }
+        .pin-btn-map.mapa { background: #0284c7; border: none; color: #fff; cursor: pointer; }
         .pin-select {
             padding: 6px 8px;
             font-size: 0.78rem;
@@ -671,27 +675,27 @@
 
     <div class="panel">
         <div class="file-group">
-            <label class="titulo" for="subirPdf">1. PDF de Routin (Orden de paradas):</label>
-            <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
-        </div>
-        <div class="file-group">
-            <label class="titulo" for="subirExcel">2. Excel de Shopee .xlsx / .csv (GPS, notas y limpiar para Routin):</label>
+            <label class="titulo" for="subirExcel">1. Excel de Shopee .xlsx / .csv (Limpiar para Routin, IA y pines):</label>
             <input type="file" id="subirExcel" onchange="cargarExcel(event)">
+            <div id="estadoIAProceso" style="display:none; margin-top:7px; padding:7px 9px; border-radius:7px; background:#1e1b4b; border:1px solid #6d28d9; font-size:0.78rem; color:#ddd6fe; line-height:1.35;"></div>
+            <button id="btnReintentarIA" type="button" class="btn-icon" style="display:none; width:100%; margin-top:6px; background:#5b21b6; border-color:#8b5cf6;" onclick="ejecutarLimpiezaConIA(false)">
+                🔄 Reintentar análisis con IA
+            </button>
             <div id="exportBox" class="export-box">
                 <div class="export-radios">
                     <label>
-                        <input type="radio" name="metodoExport" value="clasico" checked>
+                        <input type="radio" name="metodoExport" value="clasico">
                         <span><strong>Método Clásico:</strong> 1 parada por paquete</span>
                     </label>
                     <label>
-                        <input type="radio" name="metodoExport" value="agrupado">
+                        <input type="radio" name="metodoExport" value="agrupado" checked>
                         <span><strong>Método Agrupado:</strong> 1 parada por dirección en Routin</span>
                     </label>
                 </div>
                 <div id="resumenAccionesPin" class="resumen-sin-gps"></div>
                 <div class="export-actions">
-                    <button id="btnAuditarOnline" class="btn-auditar" onclick="auditarCallesOnline()">
-                        🌐 Auditar y sugerir correcciones (Online)
+                    <button id="btnAuditarOnline" class="btn-auditar" onclick="auditarPinesEnRuta()">
+                        📍 Auditar pines en ruta
                     </button>
                     <button id="btnExportarLimpio" class="btn-export" onclick="descargarExcelLimpio()">
                         ⬇️ Descargar Excel limpio para Routin
@@ -699,12 +703,35 @@
                 </div>
             </div>
         </div>
+        <div class="file-group" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+            <label class="titulo" for="subirPdf">2. PDF de Routin (Orden de paradas para cargar Fiorino):</label>
+            <input type="file" id="subirPdf" accept="application/pdf" onchange="cargarPDF(event)">
+        </div>
         <div id="estadoCarga" class="estado-carga">Esperando archivos...</div>
         <div id="alertaOmision" class="alerta-omision"></div>
         <details id="alertaPines" class="alerta-pines">
             <summary id="alertaPinesResumen">⚠️ Pines sospechosos</summary>
             <div id="alertaPinesBody" class="alerta-pines-body"></div>
         </details>
+
+        <details id="boxLogIA" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:8px;">
+            <summary style="font-size:0.77rem; font-weight:700; color:#a5b4fc; cursor:pointer;">
+                📜 Ver cambios de IA (Emergencia)
+            </summary>
+            <div id="logIAContenido" style="margin-top:7px; max-height:220px; overflow-y:auto; font-size:0.74rem; display:flex; flex-direction:column; gap:5px;"></div>
+        </details>
+
+        <details id="boxApiKeys" style="margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
+            <summary style="font-size:0.77rem; font-weight:700; color:var(--muted); cursor:pointer;">
+                🔑 Llaves privadas (IA Gemini / Google Maps)
+            </summary>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:7px;">
+                <input type="password" id="inputGeminiKey" placeholder="Pegar Gemini API Key (AIza...)" oninput="guardarApiKeysLocales()" onchange="guardarApiKeysLocales()" style="font-size:0.8rem; padding:7px 8px;">
+                <input type="password" id="inputGoogleKey" placeholder="Pegar Google Maps Key (opcional)" oninput="guardarApiKeysLocales()" onchange="guardarApiKeysLocales()" style="font-size:0.8rem; padding:7px 8px;">
+                <div style="font-size:0.71rem; color:#9ca3af;">Se guardan solo en tu teléfono (nunca en GitHub).</div>
+            </div>
+        </details>
+
         <div style="margin-top:10px; display:flex; justify-content:flex-end;">
             <button class="btn-icon peligro" onclick="limpiarTodo()">🗑️ Nuevo día (Limpiar todo)</button>
         </div>
@@ -731,7 +758,7 @@
 </div>
 
 <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
 
     // ---------------- ESTADO GLOBAL PERSISTENTE ----------------
     const STORAGE_PDF = "escaner_fiorino_pdf_v4";
@@ -739,6 +766,49 @@
     const STORAGE_SCAN = "escaner_fiorino_scan_v4";
     const STORAGE_ATRAS = "escaner_fiorino_atras_v4";
     const STORAGE_ACCION_PIN = "escaner_fiorino_accionpin_v4";
+    const STORAGE_API_KEYS = "escaner_fiorino_apikeys_v1";
+    const STORAGE_LOG_IA = "escaner_fiorino_logia_v1";
+    let logCambiosIA = [];
+
+    function cargarApiKeysLocales() {
+        try {
+            const raw = localStorage.getItem(STORAGE_API_KEYS);
+            if (!raw) return { gemini: "", google: "" };
+            const p = JSON.parse(raw);
+            return { gemini: String(p.gemini || ""), google: String(p.google || "") };
+        } catch (e) {
+            return { gemini: "", google: "" };
+        }
+    }
+
+    function guardarApiKeysLocales() {
+        const g = document.getElementById("inputGeminiKey")?.value.trim() || "";
+        const m = document.getElementById("inputGoogleKey")?.value.trim() || "";
+        try {
+            localStorage.setItem(STORAGE_API_KEYS, JSON.stringify({ gemini: g, google: m }));
+        } catch (e) {}
+    }
+
+    function renderizarLogIA() {
+        const box = document.getElementById("boxLogIA");
+        const cont = document.getElementById("logIAContenido");
+        if (!box || !cont) return;
+        if (!logCambiosIA || logCambiosIA.length === 0) {
+            box.style.display = "none";
+            cont.innerHTML = "";
+            return;
+        }
+        box.style.display = "block";
+        cont.innerHTML = logCambiosIA.map(item => `
+            <div style="background:#111827; border:1px solid #374151; border-radius:6px; padding:6px 8px; line-height:1.35;">
+                <div style="color:#9ca3af;">Orig: ${esc(item.original)}</div>
+                <div style="color:#86efac; font-weight:700;">IA: ${esc(item.limpia)}</div>
+                ${item.condominio ? `<div style="color:#fde047;">🏢 Condominio: ${esc(item.condominio)}</div>` : ""}
+                ${item.nota ? `<div style="color:#fdba74;">🔊 ${esc(item.nota)}</div>` : ""}
+                ${item.alerta ? `<div style="color:#fca5a5;">⚠️ ${esc(item.alerta)}</div>` : ""}
+            </div>
+        `).join("");
+    }
     const COOLDOWN_MS = 2500;
 
     let html5QrCode = null;
@@ -796,7 +866,12 @@
     }
 
     function hablar(texto) {
-        if (modoAudio !== "voz" || !("speechSynthesis" in window)) return;
+        if (modoAudio !== "voz") return;
+        if (window.CapBridge && window.CapBridge.esNativo()) {
+            window.CapBridge.hablarNativo(texto, false);
+            return;
+        }
+        if (!("speechSynthesis" in window)) return;
         try {
             if (window.speechSynthesis.paused) window.speechSynthesis.resume();
             window.speechSynthesis.cancel();
@@ -916,15 +991,22 @@
         return null;
     }
 
-    function pegarCoordManual(codigo, texto) {
+    async function pegarCoordManual(codigo, texto, inputEl = null) {
         const ex = mapaExcel.get(codigo);
         if (!ex) return;
         const t = String(texto || "").trim();
         if (!t) return;
 
-        const coord = extraerCoordDeTexto(t);
+        let coord = extraerCoordDeTexto(t);
+
+        if (!coord && /https?:\/\//i.test(t) && window.CapBridge && window.CapBridge.resolverCoordDeTextoOShortLink) {
+            if (inputEl) inputEl.value = "⏳ Leyendo link de Google Maps...";
+            coord = await window.CapBridge.resolverCoordDeTextoOShortLink(t);
+        }
+
         if (!coord) {
-            alert("No pude leer la coordenada. Pega algo como: -22.7428, -47.3665 o el link completo de Google Maps.");
+            if (inputEl) inputEl.value = t;
+            alert("No pude extraer coordenadas de ese texto/link. Prueba pegando coordenadas (-22.7428, -47.3665) o usa el botón 🗺️ Mapa.");
             return;
         }
 
@@ -935,6 +1017,36 @@
         reconstruirRutaActiva();
         guardarEstado();
         actualizarEstadoCargaUI();
+    }
+
+    function abrirMapaPin(codigo) {
+        const ex = mapaExcel.get(codigo);
+        if (!ex || !window.CapBridge || !window.CapBridge.abrirSelectorMapa) return;
+
+        const validos = Array.from(mapaExcel.values()).filter(x => x.lat !== null && x.lon !== null && !x.esPinSospechoso);
+        const centroDefecto = validos.length > 0
+            ? { lat: validos[Math.floor(validos.length / 2)].lat, lon: validos[Math.floor(validos.length / 2)].lon }
+            : { lat: -22.7539, lon: -47.4136 };
+
+        window.CapBridge.abrirSelectorMapa({
+            lat: ex.lat,
+            lon: ex.lon,
+            sugLat: ex.sugLat,
+            sugLon: ex.sugLon,
+            manualLat: ex.manualLat ?? null,
+            manualLon: ex.manualLon ?? null,
+            titulo: ex.address,
+            centroDefecto,
+            onConfirmar: (lat, lon) => {
+                ex.manualLat = lat;
+                ex.manualLon = lon;
+                mapaAccionPin.set(codigo, "manual");
+                recompilarListaSospechosos();
+                reconstruirRutaActiva();
+                guardarEstado();
+                actualizarEstadoCargaUI();
+            }
+        });
     }
 
     // ---------------- CARGA DE EXCEL SHOPEE ----------------
@@ -975,6 +1087,7 @@
 
             mapaExcel.clear();
             mapaAccionPin.clear();
+            logCambiosIA = [];
 
             for (const row of rows) {
                 let tn = String(row["SPX TN"] || row["SPX_TN"] || row["TN"] || row["Código"] || "").trim().toUpperCase();
@@ -1027,10 +1140,15 @@
             }
 
             analizarPinesSospechososOffline();
+            detectarConflictosCondominio();
+            recompilarListaSospechosos();
             reconstruirRutaActiva();
             guardarEstado();
             actualizarUIProgreso();
             actualizarEstadoCargaUI();
+
+            // Si hay internet y llave Gemini, optimiza automáticamente (si no, deja botón Reintentar)
+            // await ejecutarLimpiezaConIA(true);
         } catch (err) {
             console.error(err);
             estadoEl.innerText = "❌ Error al leer Excel: " + err.message;
@@ -1044,9 +1162,24 @@
     function analizarPinesSospechososOffline() {
         if (mapaExcel.size === 0) return;
 
+        // Refuerzo: atrapar pines que cayeron >12 km fuera de la zona de ruta (sin usar CEP)
+        const coordsValidas = Array.from(mapaExcel.values()).filter(ex => ex.lat !== null && ex.lon !== null);
+        if (coordsValidas.length >= 5) {
+            const lats = coordsValidas.map(c => c.lat).sort((a, b) => a - b);
+            const lons = coordsValidas.map(c => c.lon).sort((a, b) => a - b);
+            const medLat = lats[Math.floor(lats.length / 2)];
+            const medLon = lons[Math.floor(lons.length / 2)];
+            for (const ex of mapaExcel.values()) {
+                if (ex.lat !== null && ex.lon !== null && distanciaMetros(ex.lat, ex.lon, medLat, medLon) > 12000) {
+                    ex.esPinSospechoso = true;
+                    ex.motivoSospecha = ex.motivoSospecha || "Pin muy lejos de la zona (>12 km)";
+                }
+            }
+        }
+
         const porCalle = new Map();
         for (const [codigo, ex] of mapaExcel.entries()) {
-            const p = parsearDireccionInteligente(ex.address, ex.zip);
+            const p = parsearDireccionInteligente(ex.dirIA || ex.address, ex.zip);
             if (!p.calle || p.num === null || ex.lat === null || ex.lon === null) continue;
             const key = `${p.calle}|${(ex.city || "").toLowerCase()}`;
             if (!porCalle.has(key)) porCalle.set(key, []);
@@ -1128,7 +1261,270 @@
             }
         }
     }
+function detectarConflictosCondominio() {
+        if (mapaExcel.size === 0) return [];
+        const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+            codigo,
+            texto: ex.dirIA || ex.address,
+            zip: ex.zip,
+            lat: ex.lat,
+            lon: ex.lon,
+            condominio: ex.condominioIA || ""
+        }));
+        const grupos = construirGruposSentidoComun(itemsExcel);
+        const gruposConConflicto = [];
 
+        for (const codigos of grupos.values()) {
+            if (codigos.length < 2) continue;
+            const conGps = codigos
+                .map(c => ({ c, ex: mapaExcel.get(c) }))
+                .filter(x => x.ex && x.ex.lat !== null && x.ex.lon !== null);
+
+            if (conGps.length >= 2) {
+                let maxDist = 0;
+                for (let i = 0; i < conGps.length; i++) {
+                    for (let j = i + 1; j < conGps.length; j++) {
+                        const d = distanciaMetros(conGps[i].ex.lat, conGps[i].ex.lon, conGps[j].ex.lat, conGps[j].ex.lon);
+                        if (d > maxDist) maxDist = d;
+                    }
+                }
+                if (maxDist > 80) {
+                    for (const cod of codigos) {
+                        const ex = mapaExcel.get(cod);
+                        if (!ex) continue;
+                        ex.esPinSospechoso = true;
+                        ex.pinProtegidoAuto = true;
+                        ex.motivoSospecha = `Conflicto en condominio/grupo (pines a ${Math.round(maxDist)}m)`;
+                    }
+                    gruposConConflicto.push(codigos);
+                }
+            }
+        }
+        return gruposConConflicto;
+    }
+
+    async function ejecutarLimpiezaConIA(esAutomatico = false) {
+        if (mapaExcel.size === 0) return;
+        const boxEst = document.getElementById("estadoIAProceso");
+        const btnReint = document.getElementById("btnReintentarIA");
+        const keys = cargarApiKeysLocales();
+
+        const mostrarEstadoIA = (msg, mostrarReintento) => {
+            if (boxEst) {
+                boxEst.style.display = msg ? "block" : "none";
+                boxEst.innerText = msg || "";
+            }
+            if (btnReint) {
+                btnReint.style.display = mostrarReintento ? "block" : "none";
+            }
+        };
+
+        if (!navigator.onLine) {
+            mostrarEstadoIA("📴 Sin internet: Excel cargado con filtros offline.", true);
+            return;
+        }
+        if (!keys.gemini) {
+            mostrarEstadoIA("ℹ️ Pega tu Gemini Key abajo (🔑) para limpiar direcciones y notas con IA.", true);
+            return;
+        }
+        if (!window.CapBridge || !window.CapBridge.limpiarDireccionesConGemini) {
+            mostrarEstadoIA("", false);
+            return;
+        }
+
+        mostrarEstadoIA("✨ IA analizando direcciones, condominios y notas...", false);
+
+        try {
+            const mapaUnicos = new Map();
+            for (const [cod, ex] of mapaExcel.entries()) {
+                const k = `${ex.address}|${ex.bairro}|${ex.city}`;
+                if (!mapaUnicos.has(k)) {
+                    mapaUnicos.set(k, {
+                        address: ex.address,
+                        bairro: ex.bairro,
+                        city: ex.city || "Santa Bárbara d'Oeste",
+                        codigos: []
+                    });
+                }
+                mapaUnicos.get(k).codigos.push(cod);
+            }
+
+            const listaUnicos = Array.from(mapaUnicos.values());
+            const payload = listaUnicos.map((u, idx) => ({
+                id: idx,
+                address: u.address,
+                bairro: u.bairro,
+                city: u.city
+            }));
+
+            const resultados = await window.CapBridge.limpiarDireccionesConGemini(keys.gemini, payload);
+            const nuevoLog = [];
+            const condominiosSet = new Set();
+            let cantLimpiadas = 0;
+            let cantNotas = 0;
+
+            for (const r of resultados) {
+                const u = listaUnicos[r.id];
+                if (!u) continue;
+                const calleLimpia = String(r.calle || "").trim();
+                const numLimpio = String(r.numero || "").trim();
+                const dirLimpiaIA = calleLimpia ? (numLimpio ? `${calleLimpia}, ${numLimpio}` : calleLimpia) : "";
+                const cond = String(r.condominio || "").trim();
+                const notaVoz = String(r.nota_voz || "").trim();
+                const alerta = String(r.alerta || "").trim();
+
+                if (cond) condominiosSet.add(cond);
+                if (notaVoz) cantNotas++;
+                if (dirLimpiaIA) cantLimpiadas++;
+
+                for (const cod of u.codigos) {
+                    const ex = mapaExcel.get(cod);
+                    if (!ex) continue;
+                    if (dirLimpiaIA) ex.dirIA = dirLimpiaIA;
+                    if (cond) ex.condominioIA = cond;
+                    if (notaVoz) ex.notaVoz = notaVoz;
+                    if (alerta) ex.iaAlerta = alerta;
+                }
+
+                if ((dirLimpiaIA && dirLimpiaIA !== u.address) || cond || notaVoz || alerta) {
+                    nuevoLog.push({
+                        original: u.address,
+                        limpia: dirLimpiaIA || u.address,
+                        condominio: cond,
+                        nota: notaVoz,
+                        alerta
+                    });
+                }
+            }
+
+            logCambiosIA = nuevoLog;
+            renderizarLogIA();
+
+            analizarPinesSospechososOffline();
+            const conflictos = detectarConflictosCondominio();
+
+            // Si existe Google Maps Key opcional, auto-consulta SOLO conflictos de condominio y Sin GPS
+            if (keys.google && window.CapBridge.geocodificarGoogleMaps) {
+                const itemsEx = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+                    codigo, texto: ex.dirIA || ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon, condominio: ex.condominioIA || ""
+                }));
+                const grupos = Array.from(construirGruposSentidoComun(itemsEx).values());
+                const objetivos = grupos.filter(cods => cods.some(c => {
+                    const ex = mapaExcel.get(c);
+                    return ex && (ex.lat === null || ex.pinProtegidoAuto);
+                }));
+                for (const cods of objetivos) {
+                    const exRep = mapaExcel.get(cods[0]);
+                    const base = exRep.dirIA || limpiarDireccionParaRoutin(exRep.address, "", "", "");
+                    const q = [base, exRep.bairro, exRep.city || "Santa Bárbara d'Oeste", "SP", "Brasil"].filter(Boolean).join(", ");
+                    try {
+                        const gRes = await window.CapBridge.geocodificarGoogleMaps(keys.google, q);
+                        if (gRes) {
+                            for (const c of cods) {
+                                const ex = mapaExcel.get(c);
+                                if (!ex) continue;
+                                ex.sugLat = gRes.lat;
+                                ex.sugLon = gRes.lon;
+                                ex.pinProtegidoAuto = true;
+                                ex.motivoOnline = `Google (${gRes.locationType}) auto-sugerido`;
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            recompilarListaSospechosos();
+            reconstruirRutaActiva();
+            guardarEstado();
+            actualizarEstadoCargaUI();
+
+            if (conflictos.length > 0) {
+                document.getElementById("alertaPines").open = true;
+            }
+
+            mostrarEstadoIA(
+                `✨ IA optimizó ${cantLimpiadas} dir. únicas • ${condominiosSet.size} condominio(s) • ${cantNotas} nota(s) de entrega.`,
+                false
+            );
+        } catch (err) {
+            console.error(err);
+            mostrarEstadoIA(`⚠️ No se pudo ejecutar IA (${err.message}). Se mantienen filtros offline.`, true);
+        }
+    }
+
+    async function auditarPinesEnRuta() {
+        if (mapaExcel.size === 0) return;
+        const keys = cargarApiKeysLocales();
+        // Si tiene Google Maps Key, primero audita calles gratis (paralelas/fondo) y luego refina con Google protegiendo lo ya resuelto
+        await auditarCallesOnline();
+
+        if (!keys.google || !window.CapBridge || !window.CapBridge.geocodificarGoogleMaps) return;
+
+        const btn = document.getElementById("btnAuditarOnline");
+        const estadoEl = document.getElementById("estadoCarga");
+        const txtOrig = btn.innerText;
+        btn.disabled = true;
+
+        try {
+            const itemsEx = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+                codigo, texto: ex.dirIA || ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon, condominio: ex.condominioIA || ""
+            }));
+            const grupos = Array.from(construirGruposSentidoComun(itemsEx).values());
+
+            let sugerencias = 0;
+            for (let i = 0; i < grupos.length; i++) {
+                const codigos = grupos[i];
+                // Protección total: NO pisar pines ya decididos o resueltos en limpieza inicial
+                const estaProtegido = codigos.some(c => {
+                    const acc = mapaAccionPin.get(c);
+                    const ex = mapaExcel.get(c);
+                    return acc === "manual" || acc === "corregido" || acc === "singps" || (ex && ex.pinProtegidoAuto);
+                });
+                if (estaProtegido) continue;
+
+                btn.innerText = `📍 Google (${i + 1}/${grupos.length})...`;
+                const exRep = mapaExcel.get(codigos[0]);
+                const base = exRep.dirIA || limpiarDireccionParaRoutin(exRep.address, "", "", "");
+                const q = [base, exRep.bairro, exRep.city || "Santa Bárbara d'Oeste", "SP", "Brasil"].filter(Boolean).join(", ");
+                const gRes = await window.CapBridge.geocodificarGoogleMaps(keys.google, q);
+                if (!gRes) continue;
+
+                const dist = (exRep.lat !== null && exRep.lon !== null)
+                    ? distanciaMetros(exRep.lat, exRep.lon, gRes.lat, gRes.lon)
+                    : Infinity;
+
+                const esAlta = gRes.locationType === "ROOFTOP" || gRes.locationType === "RANGE_INTERPOLATED";
+                const umbral = gRes.locationType === "ROOFTOP" ? 28 : 45;
+
+                // Solo muestra si requiere verdadera atención (ya marcado como calle paralela/fondo, sin GPS, o salto grande en puerta)
+                if (exRep.lat === null || exRep.esPinSospechoso || (esAlta && dist >= umbral)) {
+                    for (const c of codigos) {
+                        const ex = mapaExcel.get(c);
+                        if (!ex) continue;
+                        ex.esPinSospechoso = true;
+                        ex.sugLat = gRes.lat;
+                        ex.sugLon = gRes.lon;
+                        ex.motivoOnline = `Google (${gRes.locationType}) ${dist === Infinity ? "Sin GPS" : "a " + Math.round(dist) + "m"}`;
+                    }
+                    sugerencias++;
+                }
+            }
+
+            recompilarListaSospechosos();
+            reconstruirRutaActiva();
+            guardarEstado();
+            actualizarEstadoCargaUI();
+            if (pinesSospechosos.length > 0) document.getElementById("alertaPines").open = true;
+            estadoEl.innerText = `📍 Auditoría completa lista (${sugerencias} sugerencia(s) nueva(s) de Google Maps).`;
+            estadoEl.style.color = "#4ade80";
+        } catch (err) {
+            estadoEl.innerText = "⚠️ Google Maps: " + err.message;
+            estadoEl.style.color = "#fde047";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = txtOrig;
+        }
+    }
     // ---------------- AUDITORÍA ONLINE (OVERPASS + PLAN B OSRM/PHOTON) ----------------
     function normalizarCalleComparacion(texto) {
         let s = String(texto || "")
@@ -1401,7 +1797,9 @@
                 throw new Error("No hay coordenadas válidas en el Excel.");
             }
 
-            for (const ex of mapaExcel.values()) {
+            for (const [cod, ex] of mapaExcel.entries()) {
+                const acc = mapaAccionPin.get(cod);
+                if (acc === "manual" || acc === "corregido" || acc === "singps" || ex.pinProtegidoAuto) continue;
                 ex.sugLat = null;
                 ex.sugLon = null;
                 ex.motivoOnline = "";
@@ -1437,8 +1835,12 @@
                 let reparadosSinGps = 0;
 
                 for (const [codigo, ex] of mapaExcel.entries()) {
-                    const parsed = parsearDireccionInteligente(ex.address, ex.zip);
-                    const calleEsperadaNorm = normalizarCalleComparacion(ex.address.split(",")[0].split("-")[0]);
+                    const acc = mapaAccionPin.get(codigo);
+                    if (acc === "manual" || acc === "corregido" || acc === "singps" || ex.pinProtegidoAuto) continue;
+
+                    const dirBaseRef = ex.dirIA || ex.address;
+                    const parsed = parsearDireccionInteligente(dirBaseRef, ex.zip);
+                    const calleEsperadaNorm = normalizarCalleComparacion(dirBaseRef.split(",")[0].split("-")[0]);
 
                     let polilineasEsperadas = [];
                     let nombreEsperadoOsm = "";
@@ -1490,11 +1892,30 @@
                         }
 
                         const simCercana = similitudBigrams(normMasCercana, calleEsperadaNorm);
-                        if (proyEsperada.dist >= 28 && proyEsperada.dist <= 260 && distMasCercana <= 22 && simCercana < 0.72) {
+                        if (proyEsperada.dist >= 22 && proyEsperada.dist <= 260 && distMasCercana <= 28 && simCercana < 0.72) {
                             ex.esPinSospechoso = true;
                             ex.sugLat = Number(proyEsperada.lat.toFixed(6));
                             ex.sugLon = Number(proyEsperada.lon.toFixed(6));
-                            ex.motivoOnline = `Cayó en ${calleMasCercana} (a ${Math.round(proyEsperada.dist)}m de ${nombreEsperadoOsm})`;
+                            ex.motivoOnline = `Pin en fondo/paralela (${calleMasCercana}, a ${Math.round(proyEsperada.dist)}m de ${nombreEsperadoOsm})`;
+                            detectadosParalela++;
+                            continue;
+                        } else if (proyEsperada.dist > 45 && (!normMasCercana || simCercana < 0.72)) {
+                            let sugLat = proyEsperada.lat;
+                            let sugLon = proyEsperada.lon;
+                            const dirQ = limpiarDireccionParaRoutin(ex.address, "", ex.city || "Santa Bárbara D'Oeste", "");
+                            const feats = await buscarEnPhoton(dirQ, proyEsperada.lat, proyEsperada.lon);
+                            const matchF = feats.find(f => {
+                                const fn = normalizarCalleComparacion(f.properties?.street || f.properties?.name || "");
+                                return fn && similitudBigrams(fn, calleEsperadaNorm) >= 0.78;
+                            });
+                            if (matchF && matchF.geometry?.coordinates) {
+                                sugLon = matchF.geometry.coordinates[0];
+                                sugLat = matchF.geometry.coordinates[1];
+                            }
+                            ex.esPinSospechoso = true;
+                            ex.sugLat = Number(sugLat.toFixed(6));
+                            ex.sugLon = Number(sugLon.toFixed(6));
+                            ex.motivoOnline = `Pin a ${Math.round(proyEsperada.dist)}m de ${nombreEsperadoOsm}`;
                             detectadosParalela++;
                             continue;
                         }
@@ -1732,11 +2153,14 @@
             for (let j = i + 1; j < n; j++) {
                 const A = listaItems[i], B = listaItems[j];
                 const pA = parsedList[i], pB = parsedList[j];
+                const dist = distanciaMetros(A.lat, A.lon, B.lat, B.lon);
+
+                // Unificación semántica de IA: solo si comparten condominio/conjunto real (ej. Conjunto Jaçanã)
+                // y no son dos casas claramente distintas con distinto número lejos entre sí
 
                 if (pA.num !== null && pB.num !== null && pA.num !== pB.num) continue;
 
                 const sim = similitudBigrams(pA.calle, pB.calle);
-                const dist = distanciaMetros(A.lat, A.lon, B.lat, B.lon);
                 const mismoCep = Boolean(pA.cepValido && pA.cepValido === pB.cepValido);
 
                 let sonMismoLugar = false;
@@ -1805,23 +2229,28 @@
         return { lat: mejor.lat, lon: mejor.lon, maestro: mejor.codigo };
     }
 
-    // ---------------- EXPORTAR EXCEL LIMPIO PARA ROUTIN ----------------
-    function limpiarDireccionParaRoutin(address, bairro, city, zip) {
-        let dir = String(address || "").replace(/(\d)\.(\d)/g, "$1$2").trim();
-        dir = dir.replace(/^R\.?\s+/i, "Rua ").replace(/^Av\.?\s+/i, "Avenida ");
+// ---------------- EXPORTAR EXCEL LIMPIO PARA ROUTIN ----------------
+    function limpiarDireccionParaRoutin(address, bairro, city, zip, dirIA = "") {
+        let dir = "";
+        if (dirIA && String(dirIA).trim()) {
+            dir = String(dirIA).trim();
+        } else {
+            dir = String(address || "").replace(/(\d)\.(\d)/g, "$1$2").trim();
+            dir = dir.replace(/^R\.?\s+/i, "Rua ").replace(/^Av\.?\s+/i, "Avenida ");
 
-        const partesComa = dir.split(",");
-        if (partesComa.length >= 2) {
-            const calleLimpia = partesComa[0]
-                .replace(/\s+bairro\s+[a-z0-9\s]+$/i, "")
-                .split("-")[0]
-                .trim();
-            const seg2 = partesComa[1].trim();
-            if (/^s\s*\/?\s*n\b/i.test(seg2)) {
-                dir = calleLimpia;
-            } else {
-                const mNum = seg2.match(/\d+/);
-                dir = mNum ? `${calleLimpia}, ${mNum[0]}` : calleLimpia;
+            const partesComa = dir.split(",");
+            if (partesComa.length >= 2) {
+                const calleLimpia = partesComa[0]
+                    .replace(/\s+bairro\s+[a-z0-9\s]+$/i, "")
+                    .split("-")[0]
+                    .trim();
+                const seg2 = partesComa[1].trim();
+                if (/^s\s*\/?\s*n\b/i.test(seg2)) {
+                    dir = calleLimpia;
+                } else {
+                    const mNum = seg2.match(/\d+/);
+                    dir = mNum ? `${calleLimpia}, ${mNum[0]}` : calleLimpia;
+                }
             }
         }
 
@@ -1858,7 +2287,14 @@
         try {
             const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => {
                 const coord = obtenerCoordActivaExcel(codigo, ex);
-                return { codigo, texto: ex.address, zip: ex.zip, lat: coord.lat, lon: coord.lon };
+                return {
+                    codigo,
+                    texto: ex.dirIA || ex.address,
+                    zip: ex.zip,
+                    lat: coord.lat,
+                    lon: coord.lon,
+                    condominio: ex.condominioIA || ""
+                };
             });
             const grupos = construirGruposSentidoComun(itemsExcel);
 
@@ -1879,7 +2315,7 @@
                     });
                     const esSospechoso = (bestLat === null || ex.esPinSospechoso) && !usaBueno;
                     const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
-                    const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+                    const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip, ex.dirIA || "");
 
                     if (usaBueno && bestLat !== null) cantCorregidos++;
                     if (omitirGps || bestLat === null) cantSinGps++;
@@ -1907,7 +2343,7 @@
                         const prefijoSeq = tieneSeq ? `${ex.seq} / ${ex.stop} / ` : "";
                         const esSospechoso = (latFinal === null || ex.esPinSospechoso) && !usaPropio;
                         const tagPin = esSospechoso ? "[⚠️PIN?] " : "";
-                        const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip);
+                        const dirLimpia = limpiarDireccionParaRoutin(ex.address, ex.bairro, ex.city, ex.zip, ex.dirIA || "");
 
                         if (usaPropio && latFinal !== null) cantCorregidos++;
                         if (latFinal === null) cantSinGps++;
@@ -1931,18 +2367,24 @@
             XLSX.utils.book_append_sheet(wb, ws, "Routin_Limpio");
 
             const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-            const blob = new Blob([wbOut], {
-                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
             const hoy = new Date().toISOString().slice(0, 10);
-            a.href = url;
-            a.download = `Routin_${metodo === "agrupado" ? "Agrupado" : "Limpio"}_${hoy}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 1500);
+            const nombreArchivo = `Routin_${metodo === "agrupado" ? "Agrupado" : "Limpio"}_${hoy}.xlsx`;
+
+            if (window.CapBridge && window.CapBridge.esNativo()) {
+                await window.CapBridge.guardarYCompartirExcel(wbOut, nombreArchivo);
+            } else {
+                const blob = new Blob([wbOut], {
+                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = nombreArchivo;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1500);
+            }
 
             let msgExtra = `✅ Exportadas ${filasLimpias.length} filas (${metodo}).`;
             if (cantCorregidos > 0) msgExtra += ` ✅ ${cantCorregidos} pin(es) corregido(s)/pegado(s).`;
@@ -2076,6 +2518,9 @@
                 refShopee: pdfInfo.refShopee,
                 dirPDF: pdfInfo.dirPDF,
                 dirCompleta: ex ? (ex.address || pdfInfo.dirPDF) : pdfInfo.dirPDF,
+                dirAgrupacion: ex ? (ex.dirIA || ex.address || pdfInfo.dirPDF) : pdfInfo.dirPDF,
+                condominioIA: ex ? (ex.condominioIA || "") : "",
+                notaVoz: ex ? (ex.notaVoz || "") : "",
                 bairro: ex ? (ex.bairro || "") : "",
                 lat: coord.lat,
                 lon: coord.lon,
@@ -2089,7 +2534,14 @@
         if (mapaExcel.size > 0) {
             const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => {
                 const coord = obtenerCoordActivaExcel(codigo, ex);
-                return { codigo, texto: ex.address, zip: ex.zip, lat: coord.lat, lon: coord.lon };
+                return {
+                    codigo,
+                    texto: ex.dirIA || ex.address,
+                    zip: ex.zip,
+                    lat: coord.lat,
+                    lon: coord.lon,
+                    condominio: ex.condominioIA || ""
+                };
             });
             const gruposExcel = construirGruposSentidoComun(itemsExcel);
 
@@ -2108,6 +2560,9 @@
                                 refShopee: (ex.seq && ex.seq !== "-") ? `${ex.seq}/${ex.stop}` : "",
                                 dirPDF: ex.address,
                                 dirCompleta: ex.address,
+                                dirAgrupacion: ex.dirIA || ex.address,
+                                condominioIA: ex.condominioIA || "",
+                                notaVoz: ex.notaVoz || "",
                                 bairro: ex.bairro || "",
                                 lat: coord.lat,
                                 lon: coord.lon,
@@ -2130,10 +2585,11 @@
 
         const itemsRuta = Array.from(mapaRuta.entries()).map(([codigo, d]) => ({
             codigo,
-            texto: d.dirCompleta,
+            texto: d.dirAgrupacion || d.dirCompleta,
             zip: d.zip || "",
             lat: d.lat,
-            lon: d.lon
+            lon: d.lon,
+            condominio: d.condominioIA || ""
         }));
         const gruposFinales = construirGruposSentidoComun(itemsRuta);
 
@@ -2182,6 +2638,7 @@
             localStorage.setItem(STORAGE_SCAN, JSON.stringify(Array.from(setEscaneados)));
             localStorage.setItem(STORAGE_ATRAS, JSON.stringify(Array.from(setAtras)));
             localStorage.setItem(STORAGE_ACCION_PIN, JSON.stringify(Array.from(mapaAccionPin.entries())));
+            localStorage.setItem(STORAGE_LOG_IA, JSON.stringify(logCambiosIA || []));
         } catch (e) {
             console.warn("No se pudo guardar en localStorage:", e);
         }
@@ -2196,6 +2653,14 @@
             if (rawEx) {
                 mapaExcel = new Map(JSON.parse(rawEx));
                 analizarPinesSospechososOffline();
+                detectarConflictosCondominio();
+                recompilarListaSospechosos();
+            }
+
+            const rawLogIA = localStorage.getItem(STORAGE_LOG_IA);
+            if (rawLogIA) {
+                logCambiosIA = JSON.parse(rawLogIA) || [];
+                renderizarLogIA();
             }
 
             const rawScan = localStorage.getItem(STORAGE_SCAN);
@@ -2313,6 +2778,7 @@
                                 <div style="font-size:0.73rem; color:#fcd34d; margin-top:2px;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
                             </div>
                             <div class="pin-row-actions">
+                                <button type="button" class="pin-btn-map mapa" onclick="abrirMapaPin('${esc(p.codigo)}')">🗺️ Mapa</button>
                                 ${pinShopeeBtn}
                                 ${pinNuevoBtn}
                                 ${pinManualBtn}
@@ -2320,8 +2786,8 @@
                             </div>
                         </div>
                         <input type="text" class="pin-manual-input" value="${esc(valorManualTexto)}"
-                            placeholder="Pegar coord. o link de Google Maps..."
-                            onchange="pegarCoordManual('${esc(p.codigo)}', this.value)">
+                            placeholder="Pegar coord. o link maps.app.goo.gl..."
+                            onchange="pegarCoordManual('${esc(p.codigo)}', this.value, this)">
                         <select class="pin-select" onchange="cambiarAccionPin('${esc(p.codigo)}', this.value)">
                             <option value="original" ${accionActual === "original" ? "selected" : ""}>Mantener pin original (Shopee)</option>
                             ${optManual}
@@ -2352,14 +2818,19 @@
         mapaAccionPin.clear();
         omitidosEnPdf = [];
         pinesSospechosos = [];
+        logCambiosIA = [];
         cacheOsmKey = "";
         cacheOsmCalles = null;
+        renderizarLogIA();
+        if (document.getElementById("estadoIAProceso")) document.getElementById("estadoIAProceso").style.display = "none";
+        if (document.getElementById("btnReintentarIA")) document.getElementById("btnReintentarIA").style.display = "none";
 
         localStorage.removeItem(STORAGE_PDF);
         localStorage.removeItem(STORAGE_EXCEL);
         localStorage.removeItem(STORAGE_SCAN);
         localStorage.removeItem(STORAGE_ATRAS);
         localStorage.removeItem(STORAGE_ACCION_PIN);
+        localStorage.removeItem(STORAGE_LOG_IA);
 
         document.getElementById("busquedaManual").value = "";
         document.getElementById("busquedaResultados").innerHTML = "";
@@ -2547,6 +3018,9 @@
             }
         }
 
+        if (datos.notaVoz) {
+            alertas.push({ texto: `🔊 ${datos.notaVoz}`, tipo: "nota" });
+        }
         if (datos.esPinSospechoso) {
             alertas.push({ texto: `📍 ${datos.motivoSospecha || "PIN DUDOSO"}`, tipo: "pin" });
         }
@@ -3008,10 +3482,26 @@
         }
     });
 
+    window.FiorinoRuta = {
+        getRuta: () => mapaRuta,
+        getGrupos: () => mapaGrupos,
+        getAtras: () => setAtras,
+        getModoAudio: () => modoAudio,
+        distanciaMetros,
+        extraerBlocoApto,
+        esc
+    };
+
     window.addEventListener("DOMContentLoaded", () => {
         restaurarEstado();
+        const keys = cargarApiKeysLocales();
+        if (document.getElementById("inputGeminiKey")) document.getElementById("inputGeminiKey").value = keys.gemini;
+        if (document.getElementById("inputGoogleKey")) document.getElementById("inputGoogleKey").value = keys.google;
         iniciarEscaner();
-        if ("serviceWorker" in navigator) {
+        if (window.CapBridge) {
+            window.CapBridge.iniciarUI();
+        }
+        if ("serviceWorker" in navigator && !(window.CapBridge && window.CapBridge.esNativo())) {
             navigator.serviceWorker.register("sw.js").catch(() => {});
         }
     });

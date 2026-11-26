@@ -1,0 +1,8 @@
+{
+  "appId": "com.fiorino.escanerpro",
+  "appName": "Escaner Fiorino Pro",
+  "webDir": "www",
+  "android": {
+    "useLegacyBridge": true
+  }
+}
