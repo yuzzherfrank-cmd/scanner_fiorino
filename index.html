@@ -637,6 +637,7 @@
     <div class="progreso-box">
         <div class="progreso-top">
             <span id="txtProgreso">Cargados: 0 / 0</span>
+            <span id="txtOdometro" style="color:#93c5fd; font-weight:700; font-size:0.82rem;">🚗 0.0 km</span>
             <span id="txtPorcentaje">0%</span>
         </div>
         <div class="barra-bg">
@@ -727,6 +728,7 @@
             </summary>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:7px;">
                 <input type="password" id="inputGeminiKey" placeholder="Pegar Gemini API Key (AIza...)" oninput="guardarApiKeysLocales()" onchange="guardarApiKeysLocales()" style="font-size:0.8rem; padding:7px 8px;">
+                <input type="password" id="inputGeoapifyKey" placeholder="Pegar Geoapify Key (3.000/día gratis)" oninput="guardarApiKeysLocales()" onchange="guardarApiKeysLocales()" style="font-size:0.8rem; padding:7px 8px;">
                 <input type="password" id="inputGoogleKey" placeholder="Pegar Google Maps Key (opcional)" oninput="guardarApiKeysLocales()" onchange="guardarApiKeysLocales()" style="font-size:0.8rem; padding:7px 8px;">
                 <div style="font-size:0.71rem; color:#9ca3af;">Se guardan solo en tu teléfono (nunca en GitHub).</div>
             </div>
@@ -773,19 +775,24 @@
     function cargarApiKeysLocales() {
         try {
             const raw = localStorage.getItem(STORAGE_API_KEYS);
-            if (!raw) return { gemini: "", google: "" };
+            if (!raw) return { gemini: "", google: "", geoapify: "" };
             const p = JSON.parse(raw);
-            return { gemini: String(p.gemini || ""), google: String(p.google || "") };
+            return {
+                gemini: String(p.gemini || ""),
+                google: String(p.google || ""),
+                geoapify: String(p.geoapify || "")
+            };
         } catch (e) {
-            return { gemini: "", google: "" };
+            return { gemini: "", google: "", geoapify: "" };
         }
     }
 
     function guardarApiKeysLocales() {
         const g = document.getElementById("inputGeminiKey")?.value.trim() || "";
         const m = document.getElementById("inputGoogleKey")?.value.trim() || "";
+        const ga = document.getElementById("inputGeoapifyKey")?.value.trim() || "";
         try {
-            localStorage.setItem(STORAGE_API_KEYS, JSON.stringify({ gemini: g, google: m }));
+            localStorage.setItem(STORAGE_API_KEYS, JSON.stringify({ gemini: g, google: m, geoapify: ga }));
         } catch (e) {}
     }
 
@@ -1010,9 +1017,16 @@
             return;
         }
 
-        ex.manualLat = Number(coord.lat.toFixed(6));
-        ex.manualLon = Number(coord.lon.toFixed(6));
-        mapaAccionPin.set(codigo, "manual");
+        const grp = pinesSospechosos.find(p => p.codigo === codigo || (p.codigosGrupo && p.codigosGrupo.includes(codigo)));
+        const cods = grp?.codigosGrupo || [codigo];
+        for (const c of cods) {
+            const item = mapaExcel.get(c);
+            if (item) {
+                item.manualLat = Number(coord.lat.toFixed(6));
+                item.manualLon = Number(coord.lon.toFixed(6));
+            }
+            mapaAccionPin.set(c, "manual");
+        }
         recompilarListaSospechosos();
         reconstruirRutaActiva();
         guardarEstado();
@@ -1037,14 +1051,17 @@
             manualLon: ex.manualLon ?? null,
             titulo: ex.address,
             centroDefecto,
-            onConfirmar: (lat, lon) => {
-                ex.manualLat = lat;
-                ex.manualLon = lon;
-                mapaAccionPin.set(codigo, "manual");
-                recompilarListaSospechosos();
-                reconstruirRutaActiva();
-                guardarEstado();
-                actualizarEstadoCargaUI();
+            oonConfirmar: (lat, lon) => {
+              const grp = pinesSospechosos.find(p => p.codigo === codigo || (p.codigosGrupo && p.codigosGrupo.includes(codigo)));
+              const cods = grp?.codigosGrupo || [codigo];
+              for (const c of cods) {
+                  const item = mapaExcel.get(c);
+                  if (item) {
+                      item.manualLat = lat;
+                      item.manualLon = lon;
+                  }
+                  mapaAccionPin.set(c, "manual");
+              }
             }
         });
     }
@@ -1242,24 +1259,46 @@
         recompilarListaSospechosos();
     }
 
-    function recompilarListaSospechosos() {
+function recompilarListaSospechosos() {
         pinesSospechosos = [];
-        for (const [codigo, ex] of mapaExcel.entries()) {
-            if (ex.esPinSospechoso || ex.motivoOnline) {
-                pinesSospechosos.push({
-                    codigo,
-                    address: ex.address,
-                    city: ex.city || "Santa Bárbara D'Oeste",
-                    lat: ex.lat,
-                    lon: ex.lon,
-                    sugLat: ex.sugLat,
-                    sugLon: ex.sugLon,
-                    manualLat: ex.manualLat ?? null,
-                    manualLon: ex.manualLon ?? null,
-                    motivo: ex.motivoOnline || ex.motivoSospecha || "Pin sospechoso"
-                });
-            }
+        if (mapaExcel.size === 0) return;
+
+        const itemsExcel = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
+            codigo, texto: ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon
+        }));
+        const grupos = construirGruposSentidoComun(itemsExcel);
+
+        for (const codigos of grupos.values()) {
+            const repCod = codigos.find(c => {
+                const ex = mapaExcel.get(c);
+                return ex && (ex.esPinSospechoso || ex.motivoOnline);
+            });
+            if (!repCod) continue;
+
+            const ex = mapaExcel.get(repCod);
+            const motivo = ex.motivoOnline || ex.motivoSospecha || "Pin sospechoso";
+            const mScore = motivo.match(/Score\s*(\d+)/i);
+            const scoreNum = mScore ? Number(mScore[1]) : 7;
+
+            pinesSospechosos.push({
+                codigo: repCod,
+                codigosGrupo: codigos,
+                cantidad: codigos.length,
+                scoreNum,
+                address: ex.address,
+                city: ex.city || "Santa Bárbara D'Oeste",
+                lat: ex.lat,
+                lon: ex.lon,
+                sugLat: ex.sugLat,
+                sugLon: ex.sugLon,
+                manualLat: ex.manualLat ?? null,
+                manualLon: ex.manualLon ?? null,
+                motivo
+            });
         }
+
+        // Ordenar de más grave (Score 10) a menos grave (Score 7)
+        pinesSospechosos.sort((a, b) => b.scoreNum - a.scoreNum);
     }
 function detectarConflictosCondominio() {
         if (mapaExcel.size === 0) return [];
@@ -1455,58 +1494,178 @@ function detectarConflictosCondominio() {
     async function auditarPinesEnRuta() {
         if (mapaExcel.size === 0) return;
         const keys = cargarApiKeysLocales();
-        // Si tiene Google Maps Key, primero audita calles gratis (paralelas/fondo) y luego refina con Google protegiendo lo ya resuelto
-        await auditarCallesOnline();
+        const geoKey = (document.getElementById("inputGeoapifyKey")?.value || keys.geoapify || "").trim();
 
-        if (!keys.google || !window.CapBridge || !window.CapBridge.geocodificarGoogleMaps) return;
+        if (!geoKey) {
+            document.getElementById("boxApiKeys").open = true;
+            document.getElementById("inputGeoapifyKey").focus();
+            alert("Pega primero tu Geoapify Key abajo (en 🔑 Llaves privadas).");
+            return;
+        }
 
         const btn = document.getElementById("btnAuditarOnline");
         const estadoEl = document.getElementById("estadoCarga");
         const txtOrig = btn.innerText;
         btn.disabled = true;
 
+        // Reintento automático suave si en algún pico responde 429 (límite por segundo)
+        const conReintento = async (fn) => {
+            try {
+                return await fn();
+            } catch (e) {
+                if (e.status === 429) {
+                    await new Promise(r => setTimeout(r, 1200));
+                    return await fn();
+                }
+                throw e;
+            }
+        };
+
         try {
             const itemsEx = Array.from(mapaExcel.entries()).map(([codigo, ex]) => ({
-                codigo, texto: ex.dirIA || ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon, condominio: ex.condominioIA || ""
+                codigo, texto: ex.address, zip: ex.zip, lat: ex.lat, lon: ex.lon
             }));
             const grupos = Array.from(construirGruposSentidoComun(itemsEx).values());
 
-            let sugerencias = 0;
-            for (let i = 0; i < grupos.length; i++) {
-                const codigos = grupos[i];
-                // Protección total: NO pisar pines ya decididos o resueltos en limpieza inicial
+            let sospechososPrioritarios = 0;
+            let procesados = 0;
+            const LOTE = 4; // 4 paradas en paralelo (~22-28 seg para 95 paradas)
+
+            const auditarUnGrupo = async (codigos) => {
+                const exRep = mapaExcel.get(codigos[0]);
                 const estaProtegido = codigos.some(c => {
                     const acc = mapaAccionPin.get(c);
-                    const ex = mapaExcel.get(c);
-                    return acc === "manual" || acc === "corregido" || acc === "singps" || (ex && ex.pinProtegidoAuto);
+                    return acc === "manual" || acc === "corregido" || acc === "singps";
                 });
-                if (estaProtegido) continue;
+                if (estaProtegido) return;
 
-                btn.innerText = `📍 Google (${i + 1}/${grupos.length})...`;
-                const exRep = mapaExcel.get(codigos[0]);
-                const base = exRep.dirIA || limpiarDireccionParaRoutin(exRep.address, "", "", "");
-                const q = [base, exRep.bairro, exRep.city || "Santa Bárbara d'Oeste", "SP", "Brasil"].filter(Boolean).join(", ");
-                const gRes = await window.CapBridge.geocodificarGoogleMaps(keys.google, q);
-                if (!gRes) continue;
+                const calleEsperadaNorm = normalizarCalleComparacion(exRep.address.split(",")[0].split("-")[0]);
+                const dirQ = limpiarDireccionParaRoutin(exRep.address, exRep.bairro, exRep.city || "Santa Bárbara d'Oeste", "");
 
-                const dist = (exRep.lat !== null && exRep.lon !== null)
-                    ? distanciaMetros(exRep.lat, exRep.lon, gRes.lat, gRes.lon)
-                    : Infinity;
+                let puntoA = null;
+                let osrmB = null;
 
-                const esAlta = gRes.locationType === "ROOFTOP" || gRes.locationType === "RANGE_INTERPOLATED";
-                const umbral = gRes.locationType === "ROOFTOP" ? 28 : 45;
+            if (exRep.lat === null || exRep.lon === null) {
+                    puntoA = await conReintento(() => window.CapBridge.consultarGeoapifyDirecto(geoKey, dirQ));
+                } else {
+                    [puntoA, osrmB] = await Promise.all([
+                        conReintento(() => window.CapBridge.consultarGeoapifyDirecto(geoKey, dirQ, exRep.lat, exRep.lon)),
+                        window.CapBridge.consultarOsrmMasCercano(exRep.lat, exRep.lon)
+                    ]);
+                }
 
-                // Solo muestra si requiere verdadera atención (ya marcado como calle paralela/fondo, sin GPS, o salto grande en puerta)
-                if (exRep.lat === null || exRep.esPinSospechoso || (esAlta && dist >= umbral)) {
-                    for (const c of codigos) {
-                        const ex = mapaExcel.get(c);
-                        if (!ex) continue;
-                        ex.esPinSospechoso = true;
-                        ex.sugLat = gRes.lat;
-                        ex.sugLon = gRes.lon;
-                        ex.motivoOnline = `Google (${gRes.locationType}) ${dist === Infinity ? "Sin GPS" : "a " + Math.round(dist) + "m"}`;
+                // Filtro anti-basura: rechazar si Geoapify devolvió centro de ciudad/barrio sin calle,
+                // otra calle distinta o un punto a >12 km (ej. otra ciudad)
+                if (puntoA) {
+                    const normCalleA = normalizarCalleComparacion(puntoA.calle || "");
+                    const simA = (normCalleA && calleEsperadaNorm) ? similitudBigrams(normCalleA, calleEsperadaNorm) : 0;
+                    const distSaltoA = (exRep.lat !== null && exRep.lon !== null)
+                        ? distanciaMetros(exRep.lat, exRep.lon, puntoA.lat, puntoA.lon)
+                        : 0;
+                    if (!puntoA.calle || simA < 0.60 || distSaltoA > 12000) {
+                        puntoA = null;
                     }
-                    sugerencias++;
+                }
+
+                let score = 1;
+                let motivo = "";
+                let sugLat = puntoA ? puntoA.lat : null;
+                let sugLon = puntoA ? puntoA.lon : null;
+
+                if (exRep.lat === null || exRep.lon === null) {
+                    score = 10;
+                    motivo = "Score 10/10: Sin GPS (0,0)";
+                } else {
+                    const latB = exRep.lat;
+                    const lonB = exRep.lon;
+
+                    let calleRealPinShopee = osrmB?.nombreCalle || "";
+                    let normCalleShopee = normalizarCalleComparacion(calleRealPinShopee);
+                    let simCalle = (normCalleShopee && calleEsperadaNorm)
+                        ? similitudBigrams(normCalleShopee, calleEsperadaNorm)
+                        : 1;
+
+                    const distAsfaltoShopee = osrmB?.distanciaAsfalto || 0;
+
+                    // Confirmar con Geoapify Inverso SOLO si OSRM no trae calle o sospecha otra calle (evita falsas alarmas en esquinas)
+                    if ((!calleRealPinShopee || (simCalle < 0.65 && distAsfaltoShopee <= 32)) && window.CapBridge.consultarGeoapifyInverso) {
+                        const reverseB = await conReintento(() => window.CapBridge.consultarGeoapifyInverso(geoKey, latB, lonB));
+                        if (reverseB?.calle) {
+                            const normRev = normalizarCalleComparacion(reverseB.calle);
+                            const simRev = calleEsperadaNorm ? similitudBigrams(normRev, calleEsperadaNorm) : 1;
+                            if (simRev >= 0.65) {
+                                // Era esquina: el lote sí pertenece a su calle real
+                                calleRealPinShopee = reverseB.calle;
+                                simCalle = simRev;
+                            } else if (!calleRealPinShopee) {
+                                calleRealPinShopee = reverseB.calle;
+                                simCalle = simRev;
+                            }
+                        }
+                    }
+
+                    const distEntrePuntos = puntoA
+                        ? distanciaMetros(latB, lonB, puntoA.lat, puntoA.lon)
+                        : 0;
+
+                    const geoUbicacionExacta = Boolean(
+                        puntoA && (puntoA.numero || puntoA.resultType === "building" || puntoA.confianza >= 0.8)
+                    );
+                    const motivoOff = String(exRep.motivoSospecha || "");
+
+                    // SCORE 10: Outlier >12km detectado offline
+                    if (motivoOff.includes("lejos")) {
+                        score = 10;
+                        motivo = `Score 10/10: ${motivoOff}`;
+                    }
+                    // SCORE 9: Calle paralela de atrás (confirmada)
+                    else if (calleRealPinShopee && simCalle < 0.65 && distAsfaltoShopee <= 32) {
+                        score = 9;
+                        motivo = `Score 9/10: Calle paralela (Cayó en ${calleRealPinShopee})`;
+                    }
+                    // SCORE 8: Desvío métrico (por número exacto de Geoapify OR respaldo métrico offline en calle sin números OSM)
+                    else if (geoUbicacionExacta && distEntrePuntos >= 120 && distEntrePuntos <= 6000) {
+                        score = 8;
+                        motivo = `Score 8/10: Desvío métrico (a ${Math.round(distEntrePuntos)}m de ref.)`;
+                    } else if (!geoUbicacionExacta && /métrico|línea/i.test(motivoOff)) {
+                        score = 8;
+                        motivo = `Score 8/10: ${motivoOff} (calle sin n° en mapa)`;
+                        sugLat = null;
+                        sugLon = null;
+                    }
+                    // SCORE 7: Sin acceso vial (campo abierto / condominio cerrado)
+                    else if (distAsfaltoShopee > 65) {
+                        score = 7;
+                        motivo = `Score 7/10: Sin acceso vial (a ${Math.round(distAsfaltoShopee)}m del asfalto)`;
+                    }
+                }
+
+                for (const c of codigos) {
+                    const ex = mapaExcel.get(c);
+                    if (!ex) continue;
+                    if (score >= 7) {
+                        ex.esPinSospechoso = true;
+                        if (sugLat !== null) { ex.sugLat = sugLat; ex.sugLon = sugLon; }
+                        ex.motivoOnline = motivo;
+                    } else {
+                        ex.esPinSospechoso = false;
+                        ex.sugLat = null;
+                        ex.sugLon = null;
+                        ex.motivoSospecha = "";
+                        ex.motivoOnline = "";
+                    }
+                }
+
+                if (score >= 7) sospechososPrioritarios++;
+            };
+
+            for (let i = 0; i < grupos.length; i += LOTE) {
+                const slice = grupos.slice(i, i + LOTE);
+                btn.innerText = `🔍 Auditando (${Math.min(procesados + slice.length, grupos.length)}/${grupos.length})...`;
+                await Promise.all(slice.map(g => auditarUnGrupo(g)));
+                procesados += slice.length;
+                if (i + LOTE < grupos.length) {
+                    await new Promise(r => setTimeout(r, 950));
                 }
             }
 
@@ -1514,11 +1673,16 @@ function detectarConflictosCondominio() {
             reconstruirRutaActiva();
             guardarEstado();
             actualizarEstadoCargaUI();
-            if (pinesSospechosos.length > 0) document.getElementById("alertaPines").open = true;
-            estadoEl.innerText = `📍 Auditoría completa lista (${sugerencias} sugerencia(s) nueva(s) de Google Maps).`;
+
+            if (pinesSospechosos.length > 0) {
+                document.getElementById("alertaPines").open = true;
+            }
+
+            estadoEl.innerText = `✅ Auditoría completada: solo ${sospechososPrioritarios} pin(es) prioritarios (Score 7-10) requieren tu atención.`;
             estadoEl.style.color = "#4ade80";
         } catch (err) {
-            estadoEl.innerText = "⚠️ Google Maps: " + err.message;
+            console.error(err);
+            estadoEl.innerText = "⚠️ Error en auditoría: " + err.message;
             estadoEl.style.color = "#fde047";
         } finally {
             btn.disabled = false;
@@ -1530,6 +1694,9 @@ function detectarConflictosCondominio() {
         let s = String(texto || "")
             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
             .toLowerCase();
+
+        // Cortar complementos tipo bloco/apto/casa antes de comparar nombres de calles
+        s = s.split(/\b(?:bloco|blc|blo|bl|apto|apartamento|apt|ap|casa|lote|quadra|fundos|fds|condominio|cond)\b/)[0];
 
         s = s
             .replace(/\br\.?\s+/g, "rua ")
@@ -1558,6 +1725,7 @@ function detectarConflictosCondominio() {
 
         s = s
             .replace(/^(rua|avenida|travessa|alameda|rodovia|estrada|praca|largo|viela|beco)\s+/i, "")
+            .replace(/\b\d+\b/g, " ")
             .replace(/[^a-z0-9\s]/g, " ")
             .replace(/\s+/g, " ")
             .trim();
@@ -2011,13 +2179,17 @@ function detectarConflictosCondominio() {
         }
     }
 
-    function cambiarAccionPin(codigo, accion) {
-        if (accion === "original") mapaAccionPin.delete(codigo);
-        else mapaAccionPin.set(codigo, accion);
-        guardarEstado();
-        reconstruirRutaActiva();
-        actualizarResumenAccionesPin();
-    }
+function cambiarAccionPin(codigo, accion) {
+      const grp = pinesSospechosos.find(p => p.codigo === codigo || (p.codigosGrupo && p.codigosGrupo.includes(codigo)));
+      const cods = grp?.codigosGrupo || [codigo];
+      for (const c of cods) {
+          if (accion === "original") mapaAccionPin.delete(c);
+          else mapaAccionPin.set(c, accion);
+      }
+      guardarEstado();
+      reconstruirRutaActiva();
+      actualizarResumenAccionesPin();
+  }
 
     function aplicarAccionATodosSospechosos(accion) {
         for (const p of pinesSospechosos) {
@@ -2774,7 +2946,7 @@ function detectarConflictosCondominio() {
                     <div class="pin-row">
                         <div class="pin-row-top">
                             <div style="min-width:0; word-break:break-word; flex:1;">
-                                <strong>${esc(p.address)}</strong>
+                                <strong>${p.cantidad > 1 ? "[📦x" + p.cantidad + "] " : ""}${esc(p.address)}</strong>
                                 <div style="font-size:0.73rem; color:#fcd34d; margin-top:2px;">${esc(p.motivo)} • ${esc(p.codigo.slice(-6))}</div>
                             </div>
                             <div class="pin-row-actions">
@@ -2830,6 +3002,11 @@ function detectarConflictosCondominio() {
         localStorage.removeItem(STORAGE_SCAN);
         localStorage.removeItem(STORAGE_ATRAS);
         localStorage.removeItem(STORAGE_ACCION_PIN);
+        localStorage.removeItem("escaner_fiorino_odometro_v1");
+        const odoEl = document.getElementById("txtOdometro");
+        if (odoEl) odoEl.innerText = "🚗 0.0 km";
+        const cardRes = document.getElementById("cardResumenRuta");
+        if (cardRes) cardRes.style.display = "none";
         localStorage.removeItem(STORAGE_LOG_IA);
 
         document.getElementById("busquedaManual").value = "";
@@ -3504,6 +3681,7 @@ function detectarConflictosCondominio() {
         if ("serviceWorker" in navigator && !(window.CapBridge && window.CapBridge.esNativo())) {
             navigator.serviceWorker.register("sw.js").catch(() => {});
         }
+        if (document.getElementById("inputGeoapifyKey")) document.getElementById("inputGeoapifyKey").value = keys.geoapify;
     });
 </script>
 </body>

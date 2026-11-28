@@ -8,7 +8,60 @@ import { Haptics } from "@capacitor/haptics";
 const BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
 
 const STORAGE_GPS_CFG = "escaner_fiorino_gps_cfg_v1";
+const STORAGE_ODOMETRO = "escaner_fiorino_odometro_v1";
 const CANAL_ALERTAS = "ruta_alertas_v1";
+
+let odom = cargarOdometro();
+
+function cargarOdometro() {
+    try {
+        const raw = localStorage.getItem(STORAGE_ODOMETRO);
+        if (raw) {
+            const p = JSON.parse(raw);
+            return {
+                kmTotal: Number(p.kmTotal) || 0,
+                iniciado: Boolean(p.iniciado),
+                enParada1: Boolean(p.enParada1),
+                tsInicio: p.tsInicio || null,
+                tsFin: p.tsFin || null,
+                finalizado: Boolean(p.finalizado),
+                soloDesdeParada1: p.soloDesdeParada1 !== undefined ? Boolean(p.soloDesdeParada1) : true,
+                ultimaCoord: null // Siempre null al arrancar para no sumar el viaje desde casa
+            };
+        }
+    } catch (e) {}
+    return {
+        kmTotal: 0,
+        iniciado: false,
+        enParada1: false,
+        tsInicio: null,
+        tsFin: null,
+        finalizado: false,
+        soloDesdeParada1: true,
+        ultimaCoord: null
+    };
+}
+
+function guardarOdometro() {
+    try {
+        localStorage.setItem(STORAGE_ODOMETRO, JSON.stringify({
+            kmTotal: odom.kmTotal,
+            iniciado: odom.iniciado,
+            enParada1: odom.enParada1,
+            tsInicio: odom.tsInicio,
+            tsFin: odom.tsFin,
+            finalizado: odom.finalizado,
+            soloDesdeParada1: odom.soloDesdeParada1
+        }));
+    } catch (e) {}
+}
+
+function actualizarOdometroUI() {
+    const el = document.getElementById("txtOdometro");
+    if (el) {
+        el.innerText = `🚗 ${odom.kmTotal.toFixed(1)} km`;
+    }
+}
 
 let watcherId = null;
 let notifSeq = 100;
@@ -493,6 +546,50 @@ function evaluarUbicacionRuta(location) {
     const lon = location.longitude;
     const acc = Number(location.accuracy || 0);
 
+// --- ODÓMETRO INTELIGENTE (Anti-rebote y persistente) ---
+    if (!odom.finalizado && acc <= 25) {
+        const ahora = Date.now();
+        const paradas = construirParadasFisicasOrdenadas();
+        const p1 = paradas.find(p => p.primeraParada === 1);
+
+        if (!odom.enParada1 && odom.soloDesdeParada1 && p1 && p1.gpsConfiable) {
+            const dP1 = api.distanciaMetros(lat, lon, p1.lat, p1.lon);
+            if (dP1 <= 95) {
+                odom.enParada1 = true;
+                odom.iniciado = true;
+                odom.tsInicio = odom.tsInicio || ahora;
+                odom.ultimaCoord = { lat, lon, ts: ahora };
+                guardarOdometro();
+                actualizarEstadoRutaUI("🟢 Odómetro activado: Llegaste a Parada #1");
+            }
+        } else if (!odom.soloDesdeParada1 && !odom.iniciado) {
+            odom.iniciado = true;
+            odom.tsInicio = odom.tsInicio || ahora;
+            odom.ultimaCoord = { lat, lon, ts: ahora };
+            guardarOdometro();
+        }
+
+        if (odom.iniciado && (!odom.soloDesdeParada1 || odom.enParada1)) {
+            if (!odom.ultimaCoord) {
+                odom.ultimaCoord = { lat, lon, ts: ahora };
+            } else {
+                const distMetros = api.distanciaMetros(odom.ultimaCoord.lat, odom.ultimaCoord.lon, lat, lon);
+                const dtSeg = (ahora - odom.ultimaCoord.ts) / 1000;
+
+                // Mínimo 18m de avance real con velocidad >= 2.5 km/h (acepta manejo lento entre casas sin sumar rebote parado)
+                if (dtSeg > 1 && distMetros >= 18) {
+                    const velKmh = (distMetros / dtSeg) * 3.6;
+                    if (velKmh >= 2.5 && velKmh <= 140) {
+                        odom.kmTotal += (distMetros / 1000);
+                        odom.ultimaCoord = { lat, lon, ts: ahora };
+                        guardarOdometro();
+                        actualizarOdometroUI();
+                    }
+                }
+            }
+        }
+    }
+
     if (acc > 65) {
         actualizarEstadoRutaUI(`🛰️ Señal débil (±${Math.round(acc)}m), esperando GPS preciso...`);
         return;
@@ -589,7 +686,8 @@ function evaluarUbicacionRuta(location) {
 
     const hora = new Date().toTimeString().slice(0, 5);
     const proxTxt = paradaMasCercana ? ` • Próx: #${paradaMasCercana.paradasTexto} a ${Math.round(minDist)}m` : "";
-    actualizarEstadoRutaUI(`🟢 GPS en ruta (${hora}, ±${Math.round(acc)}m)${proxTxt}`);
+    const odoTag = (odom.soloDesdeParada1 && !odom.enParada1) ? " • ⏳ Esperando P1" : "";
+    actualizarEstadoRutaUI(`🟢 GPS (${hora}, ±${Math.round(acc)}m)${proxTxt}${odoTag}`);
 }
 
 async function toggleSeguimientoRuta() {
@@ -649,6 +747,127 @@ function actualizarEstadoRutaUI(texto) {
     if (el) el.innerText = texto;
 }
 
+// ---------------- MOTOR GEOAPIFY + OSRM (SCORE 1 AL 10) ----------------
+
+async function peticionGetJsonLimpia(baseUrl, paramsObj) {
+    const qs = new URLSearchParams(paramsObj).toString();
+    const fullUrl = qs ? `${baseUrl}?${qs}` : baseUrl;
+
+    // 1. Intento directo con fetch (idéntico al navegador, sin headers extra que activen preflight)
+    try {
+        const res = await fetch(fullUrl, { method: "GET" });
+        const text = await res.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch (e) {}
+
+        if (!res.ok) {
+            const msg = data?.message || data?.error?.message || `HTTP ${res.status}`;
+            const err = new Error(msg);
+            err.status = res.status;
+            throw err;
+        }
+        return data;
+    } catch (fetchErr) {
+        // Si falló por CORS/red en el WebView y estamos en APK, probamos vía CapacitorHttp con params nativos
+        if (fetchErr.status || !esNativo()) throw fetchErr;
+
+        const resCap = await CapacitorHttp.get({
+            url: baseUrl,
+            params: paramsObj
+        });
+        const dataCap = typeof resCap.data === "string" ? JSON.parse(resCap.data) : resCap.data;
+        if (resCap.status >= 400) {
+            const msg = dataCap?.message || dataCap?.error?.message || `HTTP ${resCap.status}`;
+            const err = new Error(msg);
+            err.status = resCap.status;
+            throw err;
+        }
+        return dataCap;
+    }
+}
+
+async function consultarGeoapifyDirecto(apiKey, queryTexto, biasLat = -22.7539, biasLon = -47.4136) {
+    const key = String(apiKey || "").trim();
+    if (!key || !queryTexto) return null;
+
+    const params = {
+        text: String(queryTexto),
+        filter: "countrycode:br",
+        limit: "1",
+        apiKey: key
+    };
+    if (biasLat !== null && biasLon !== null) {
+        params.bias = `proximity:${biasLon},${biasLat}`;
+    }
+
+    try {
+        const data = await peticionGetJsonLimpia("https://api.geoapify.com/v1/geocode/search", params);
+        const feat = data?.features?.[0];
+        if (!feat || !feat.geometry?.coordinates) return null;
+        return {
+            lat: Number(feat.geometry.coordinates[1].toFixed(6)),
+            lon: Number(feat.geometry.coordinates[0].toFixed(6)),
+            calle: feat.properties?.street || "",
+            numero: feat.properties?.housenumber || "",
+            ciudad: feat.properties?.city || "",
+            bairro: feat.properties?.district || "",
+            resultType: feat.properties?.result_type || "",
+            confianza: feat.properties?.rank?.confidence || 0
+        };
+    } catch (e) {
+        if (e.status === 401 || e.status === 403) {
+            throw new Error(`Geoapify ${e.status}: ${e.message} [len:${key.length} ${key.slice(0, 4)}..${key.slice(-4)}]`);
+        }
+        throw e;
+    }
+}
+
+async function consultarGeoapifyInverso(apiKey, lat, lon) {
+    const key = String(apiKey || "").trim();
+    if (!key || lat === null || lon === null) return null;
+
+    try {
+        const data = await peticionGetJsonLimpia("https://api.geoapify.com/v1/geocode/reverse", {
+            lat: String(lat),
+            lon: String(lon),
+            limit: "1",
+            apiKey: key
+        });
+        const feat = data?.features?.[0];
+        if (!feat) return null;
+        return {
+            calle: feat.properties?.street || "",
+            numero: feat.properties?.housenumber || "",
+            bairro: feat.properties?.district || "",
+            distanciaAlPunto: feat.properties?.distance || 0
+        };
+    } catch (e) {
+        if (e.status === 401 || e.status === 403) {
+            throw new Error(`Geoapify ${e.status}: ${e.message} [len:${key.length} ${key.slice(0, 4)}..${key.slice(-4)}]`);
+        }
+        throw e;
+    }
+}
+
+async function consultarOsrmMasCercano(lat, lon) {
+    if (lat === null || lon === null) return null;
+    try {
+        const data = await peticionGetJsonLimpia(`https://router.project-osrm.org/nearest/v1/driving/${lon},${lat}`, {
+            number: "3"
+        });
+        if (data && data.code === "Ok" && Array.isArray(data.waypoints) && data.waypoints.length > 0) {
+            const w = data.waypoints[0];
+            return {
+                nombreCalle: w.name || "",
+                distanciaAsfalto: Number(w.distance || 0),
+                latAsfalto: w.location ? w.location[1] : null,
+                lonAsfalto: w.location ? w.location[0] : null
+            };
+        }
+    } catch (e) {}
+    return null;
+}
+
 function iniciarUI() {
     if (!esNativo()) return;
     const progresoBox = document.querySelector(".progreso-box");
@@ -659,11 +878,20 @@ function iniciarUI() {
     panel.className = "panel";
     panel.style.padding = "10px 12px";
     panel.innerHTML = `
-        <button id="btnToggleGpsRuta" type="button" style="width:100%; padding:11px; border-radius:9px; border:1px solid #22c55e; background:#15803d; color:#fff; font-weight:800; font-size:0.95rem; cursor:pointer;">
-            🛰️ Iniciar GPS en Ruta
-        </button>
+        <div style="display:flex; gap:6px;">
+            <button id="btnToggleGpsRuta" type="button" style="flex:2; padding:11px; border-radius:9px; border:1px solid #22c55e; background:#15803d; color:#fff; font-weight:800; font-size:0.92rem; cursor:pointer;">
+                🛰️ Iniciar GPS en Ruta
+            </button>
+            <button id="btnFinalizarRuta" type="button" style="flex:1; padding:11px 6px; border-radius:9px; border:1px solid #4b5563; background:#1f2937; color:#f87171; font-weight:800; font-size:0.80rem; cursor:pointer;">
+                🏁 Terminar
+            </button>
+        </div>
         <div id="estadoGpsRuta" style="font-size:0.78rem; color:#9ca3af; margin-top:6px; text-align:center;">
-            GPS apagado (actívalo al salir del depósito).
+            GPS apagado (pausar guarda tus km intactos).
+        </div>
+        <div id="cardResumenRuta" style="display:${odom.finalizado ? "block" : "none"}; margin-top:8px; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #38bdf8; font-size:0.82rem; color:#f1f5f9; line-height:1.4; text-align:center;">
+            <strong>🏁 Ruta Finalizada</strong><br>
+            <span id="txtDetalleResumen">Total: ${odom.kmTotal.toFixed(1)} km recorridos</span>
         </div>
         <details style="margin-top:8px; border-top:1px solid #303746; padding-top:7px;">
             <summary style="font-size:0.79rem; font-weight:700; color:#cbd5e1; cursor:pointer;">
@@ -685,6 +913,10 @@ function iniciarUI() {
                 <div>
                     <label style="display:block; color:#9ca3af; margin-bottom:3px;">Repetir si vuelvo (min)</label>
                     <input type="number" id="cfgMinutosReaviso" min="0" max="30" step="1" value="${cfg.minutosReaviso}" style="padding:6px 8px; font-size:0.84rem;">
+                </div>
+            <div style="grid-column:span 2; display:flex; align-items:center; gap:6px; padding-top:2px;">
+                    <input type="checkbox" id="cfgSoloDesdeP1" ${odom.soloDesdeParada1 ? "checked" : ""} style="width:auto;">
+                    <label for="cfgSoloDesdeP1" style="cursor:pointer;">Empezar a sumar km al llegar a Parada #1</label>
                 </div>
             </div>
             <div style="display:flex; gap:6px; margin-top:9px;">
@@ -709,6 +941,10 @@ function iniciarUI() {
     ["cfgRadioAviso", "cfgRadioCaminando", "cfgMinCaminando", "cfgMinutosReaviso"].forEach(id => {
         document.getElementById(id).addEventListener("change", leerInputs);
     });
+    document.getElementById("cfgSoloDesdeP1").addEventListener("change", (ev) => {
+        odom.soloDesdeParada1 = Boolean(ev.target.checked);
+        guardarOdometro();
+    });
 
     document.getElementById("btnProbarAlerta").addEventListener("click", () => {
         dispararAlertaNativa({
@@ -723,6 +959,30 @@ function iniciarUI() {
         estadoAlertas.clear();
         actualizarEstadoRutaUI("🔄 Avisos GPS reiniciados.");
     });
+
+    actualizarOdometroUI();
+
+    document.getElementById("btnFinalizarRuta").addEventListener("click", () => {
+        if (!confirm("¿Deseas finalizar la ruta de hoy y congelar los kilómetros?")) return;
+        if (watcherId !== null) toggleSeguimientoRuta();
+        odom.finalizado = true;
+        odom.tsFin = Date.now();
+        guardarOdometro();
+
+        const card = document.getElementById("cardResumenRuta");
+        const txt = document.getElementById("txtDetalleResumen");
+        let duracionTxt = "";
+        if (odom.tsInicio && odom.tsFin) {
+            const min = Math.round((odom.tsFin - odom.tsInicio) / 60000);
+            const h = Math.floor(min / 60);
+            const m = min % 60;
+            duracionTxt = ` • Tiempo: ${h}h ${m}m`;
+        }
+        if (card && txt) {
+            txt.innerText = `Total: ${odom.kmTotal.toFixed(1)} km recorridos${duracionTxt}`;
+            card.style.display = "block";
+        }
+    });
 }
 
 window.CapBridge = {
@@ -731,5 +991,8 @@ window.CapBridge = {
     guardarYCompartirExcel,
     resolverCoordDeTextoOShortLink,
     abrirSelectorMapa,
+    consultarGeoapifyDirecto,
+    consultarGeoapifyInverso,
+    consultarOsrmMasCercano,
     iniciarUI
 };
